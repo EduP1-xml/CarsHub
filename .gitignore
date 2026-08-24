@@ -1,0 +1,26 @@
+# Dependências e Builds do Node.js (Frontend)
+node_modules/
+dist/
+build/
+npm-debug.log*
+
+# Builds e arquivos compilados do Java/Maven (Backend)
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Configurações de IDEs (VS Code, IntelliJ, Eclipse)
+.vscode/
+.idea/
+*.iml
+.metadata/
+.classpath
+.project
+
+# Variáveis de ambiente e arquivos de Sistema Operacional
+.env
+.env.local
+.DS_Store
+Thumbs.db 
