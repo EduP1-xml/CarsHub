@@ -2,20 +2,20 @@ spring:
   application:
     name: backend
 
-    datasource:
-      # A flag createDatabaseIfNotExist cria o schema automaticamente caso ele não exista
-      url: jdbc:mysql://localhost:3306/carshub?createDatabaseIfNotExist=true&serverTimezone=UTC
-      username: admin
-      password: sua_senha_local # Substitua pela senha do seu MySQL local
-      driver-class-name: com.mysql.cj.jdbc.Driver
+  datasource:
+    # A flag createDatabaseIfNotExist cria o schema automaticamente caso ele não exista
+    url: jdbc:mysql://localhost:3306/carshub?createDatabaseIfNotExist=true&serverTimezone=UTC
+    username: root
+    password: "@BMW_e36+XT660"
+    driver-class-name: com.mysql.cj.jdbc.Driver
 
-      jpa:
-        # Mostra as queries SQL geradas no console (excelente para debug)
-        show-sql: true
-        hibernate:
-          # O 'update' cria e atualiza as tabelas automaticamente com base nas suas classes Java
-          ddl-auto: update
-        properties:
-          hibernate:
-            format_sql: true
-            dialect: org.hibernate.dialect.MySQLDialect
+  jpa:
+    # Mostra as queries SQL geradas no console (excelente para debug)
+    show-sql: true
+    hibernate:
+      # O 'update' cria e atualiza as tabelas automaticamente com base nas suas classes Java
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect

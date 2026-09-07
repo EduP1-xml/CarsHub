@@ -28,7 +28,7 @@ public class Carro {
     private String marca;
 
     @NotBlank(message = "O modelo é obrigatório")
-    @Size(max = 30)
+    @Size(max = 30) //definir um valores para texto(tem atributo para validar mínimo e máximo) validado na compilação do código
     @Column(name = "modelo_carro", length = 30, nullable = false)
     private String modelo;
 
@@ -39,8 +39,8 @@ public class Carro {
     private Integer numeroPortas;
 
     @NotNull(message = "A litragem do motor é obrigatória")
-    @DecimalMin(value = "0.049", message = "A litragem mínima é 0,049 L")
-    @DecimalMax(value = "15.000", message = "A litragem máxima é 15,000 L")
+    @DecimalMin(value = "0.049", message = "A litragem mínima é 0,049 L")// definir um valor mínimo para números validado na compilação do código
+    @DecimalMax(value = "15.000", message = "A litragem máxima é 15,000 L")// definir um valor máximo para números validado na compilação do código
     @Column(name = "litragem_motor_carro", precision = 5, scale = 3, nullable = false)
     private BigDecimal litragemMotor;
 
@@ -50,7 +50,7 @@ public class Carro {
     private TipoCambio cambio;
 
     @NotBlank(message = "A placa é obrigatória")
-    @Size(min = 7, max = 7, message = "A placa deve ter exatamente 7 caracteres")
+    @Pattern(regexp = "^[A-Za-z0-9]{7}$", message = "A placa deve conter exatamente 7 caracteres alfanuméricos")
     @Column(name = "placa_carro", length = 7, unique = true, nullable = false)
     private String placa;
 

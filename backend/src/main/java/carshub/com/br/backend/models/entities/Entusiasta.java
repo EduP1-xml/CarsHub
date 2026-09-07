@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 
@@ -12,27 +13,18 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "Entusiasta")
-@Inheritance(strategy = InheritanceType.JOINED)
+@PrimaryKeyJoinColumn(name = "idEntusiasta")
 @Data
+@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public class Entusiasta {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @JdbcTypeCode(java.sql.Types.BINARY)
-    @Column(name = "idEntusiasta", updatable = false, nullable = false)
-    private UUID id;
+public class Entusiasta extends Usuario {
 
     @NotBlank(message = "O CPF é obrigatório")
-    @Pattern(regexp = "\\d{11}", message = "O CPF deve conter exatamente 11 dígitos numéricos")
+    @Pattern(regexp = "\\d{11}", message = "O CPF deve conter exatamente 11 dígitos numéricos")// define uma padrão exatp(nesse caso tamanho 11) para ser validado em tempo de compilação
     @Column(name = "cpf_entusiasta", length = 11, unique = true)
     private String cpf;
 
     @NotNull(message = "É necessário informar se possui carros")
     @Column(name = "possui_carros", nullable = false)
-    private Boolean possuiCarros;
-
-    @OneToOne
-    @JoinColumn(name = "Usuario_id_Usuario", referencedColumnName = "id_Usuario", nullable = false)
-    private Usuario usuario;
+    private Boolean possuiCarros = false;
 }

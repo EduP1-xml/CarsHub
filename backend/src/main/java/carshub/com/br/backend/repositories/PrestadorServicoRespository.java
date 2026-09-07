@@ -5,6 +5,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.UUID;
 
-public interface PrestadorServicoRepository extends JpaRepository<PrestadorServico, UUID> {
-    boolean existsByUsuarioId(UUID usuarioId);
+public interface PrestadorServicoRespository extends JpaRepository<PrestadorServico, UUID> {
+    boolean existsByCnpj(String cnpj);
 }

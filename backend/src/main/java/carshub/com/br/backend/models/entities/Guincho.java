@@ -18,13 +18,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class Guincho extends PrestadorServico {
 
-    @NotBlank(message = "O CNPJ é obrigatório para motoristas de Guincho")
-    @Pattern(regexp = "\\d{14}", message = "O CNPJ deve conter exatamente 14 dígitos numéricos")
-    @Column(name = "cnpj_Guincho", length = 14, unique = true)
-    private String cnpj;
-
     @NotBlank(message = "A placa do guincho é obrigatória")
-    @Pattern(regexp = "\\d{7}", message = "A placa deve conter exatamente 7 dígitos")
+    @Pattern(regexp = "^[A-Za-z0-9]{7}$", message = "A placa deve conter exatamente 7 caracteres alfanuméricos")
     @Column(name = "placa_Guincho", length = 7, unique = true, nullable = false)
     private String placa;
 }

@@ -41,6 +41,6 @@ public class Evento {
 
     @NotBlank(message = "É necessário ter um organizador vinculado para criar um evento")
     @ManyToOne(optional = false)
-    @JoinColumn(name = "OrganizadorEvento_idOrganizadorEvento", referencedColumnName = "idOrganizadorEvento", nullable = false)
+    @JoinColumn(name = "evento_idOrganizadorEvento", referencedColumnName = "idOrganizadorEvento", nullable = false)
     private OrganizadorEvento organizadorEvento;
 }

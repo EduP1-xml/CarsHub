@@ -1,14 +1,12 @@
 package carshub.com.br.backend.models.entities;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.PrimaryKeyJoinColumn;
-import jakarta.persistence.Table;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
+import carshub.com.br.backend.models.enums.ServicosOfertados;
+import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
 
 @Entity
 @Table(name = "Mecanico")
@@ -18,8 +16,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class Mecanico extends PrestadorServico {
 
-    @NotBlank(message = "O CNPJ é obrigatório para mecânicos")
-    @Pattern(regexp = "\\d{14}", message = "O CNPJ deve conter exatamente 14 dígitos numéricos")
-    @Column(name = "cnpj_mecanico", length = 14, unique = true)
-    private String cnpj;
+    // Cria a tabela auxiliar para armazenar a lista de Enums selecionados pelo mecânico
+    @ElementCollection(targetClass = ServicosOfertados.class, fetch = FetchType.EAGER)
+    @Enumerated(EnumType.STRING)
+    @CollectionTable(name = "servicos_ofertados_mecanico", joinColumns = @JoinColumn(name = "idMecanico"))
+    @Column(name = "servico")
+    private List<ServicosOfertados> servicos;
 }
