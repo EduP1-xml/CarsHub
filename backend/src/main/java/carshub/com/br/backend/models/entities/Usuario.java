@@ -1,7 +1,7 @@
 package carshub.com.br.backend.models.entities;
 
 
-import carshub.com.br.backend.models.enums.TipoUsuario;
+import carshub.com.br.backend.models.enums.tiposUsuarios.TipoUsuario;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -44,7 +44,7 @@ public abstract class Usuario {
     private String nome;
 
     @NotNull(message = "A data de nascimento é obrigatória")
-    @Column(name = "data_nascimento_Usuario", nullable = false)
+    @Column(name = "dataNascimento_Usuario", nullable = false)
     private LocalDate dataNascimento;
 
     @NotBlank(message = "O telefone é obrigatório")
@@ -54,6 +54,6 @@ public abstract class Usuario {
 
     @NotNull(message = "O tipo de usuário é obrigatório")
     @Enumerated(EnumType.STRING)
-    @Column(name = "tipo_Usuario", nullable = false)
+    @Column(name = "tipoUsuario_Usuario", nullable = false)
     private TipoUsuario tipoUsuario;
 }

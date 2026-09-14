@@ -1,8 +1,8 @@
 package carshub.com.br.backend.models.dtos;
 
-import carshub.com.br.backend.models.enums.ServicosOfertados;
-import carshub.com.br.backend.models.enums.TipoPrestadorServico;
-import carshub.com.br.backend.models.enums.TipoUsuario;
+import carshub.com.br.backend.models.enums.mecanicos.ServicosOfertados;
+import carshub.com.br.backend.models.enums.tiposUsuarios.TipoPrestadorServico;
+import carshub.com.br.backend.models.enums.tiposUsuarios.TipoUsuario;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

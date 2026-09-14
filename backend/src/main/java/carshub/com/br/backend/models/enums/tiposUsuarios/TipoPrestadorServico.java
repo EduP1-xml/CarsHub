@@ -1,4 +1,4 @@
-package carshub.com.br.backend.models.enums;
+package carshub.com.br.backend.models.enums.tiposUsuarios;
 
 public enum TipoPrestadorServico {
     MECANICO,
