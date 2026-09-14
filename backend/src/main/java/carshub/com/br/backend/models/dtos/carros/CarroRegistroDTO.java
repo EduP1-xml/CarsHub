@@ -1,9 +1,8 @@
-package carshub.com.br.backend.models.dtos;
+package carshub.com.br.backend.models.dtos.carros;
 
 import carshub.com.br.backend.models.enums.carros.*;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
-import java.util.UUID;
 
 public record CarroRegistroDTO(
         @NotBlank(message = "A marca é obrigatória") String marca,

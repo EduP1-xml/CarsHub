@@ -1,7 +1,7 @@
 package carshub.com.br.backend.controllers;
 
-import carshub.com.br.backend.models.dtos.CarroRegistroDTO;
-import carshub.com.br.backend.models.dtos.CarroResponseDTO;
+import carshub.com.br.backend.models.dtos.carros.CarroRegistroDTO;
+import carshub.com.br.backend.models.dtos.carros.CarroResponseDTO;
 import carshub.com.br.backend.services.CarroService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;

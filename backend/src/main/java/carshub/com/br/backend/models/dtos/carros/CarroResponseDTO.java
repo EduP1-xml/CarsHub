@@ -1,4 +1,4 @@
-package carshub.com.br.backend.models.dtos;
+package carshub.com.br.backend.models.dtos.carros;
 
 import java.util.UUID;
 

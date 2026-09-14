@@ -2,8 +2,8 @@ package carshub.com.br.backend.services;
 
 import carshub.com.br.backend.exceptions.PlacaJaCadastradaException;
 import carshub.com.br.backend.exceptions.UsuarioNaoEncontradoException;
-import carshub.com.br.backend.models.dtos.CarroRegistroDTO;
-import carshub.com.br.backend.models.dtos.CarroResponseDTO;
+import carshub.com.br.backend.models.dtos.carros.CarroRegistroDTO;
+import carshub.com.br.backend.models.dtos.carros.CarroResponseDTO;
 import carshub.com.br.backend.models.entities.Carro;
 import carshub.com.br.backend.models.entities.Entusiasta;
 import carshub.com.br.backend.repositories.CarroRepository;
