@@ -1,0 +1,29 @@
+name: DeepSeek Assistant
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ask DeepSeek
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          RESPONSE=$(curl -s https://api.deepseek.com/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+            -d "{
+                  \"model\": \"deepseek-chat\",
+                  \"messages\": [
+                    {\"role\": \"system\", \"content\": \"Você é um especialista em Java e Spring Boot. Analise a issue e forneça uma sugestão técnica para resolver o problema ou dividir em tarefas.\"},
+                    {\"role\": \"user\", \"content\": \"Issue: ${{ github.event.issue.title }}\n\n${{ github.event.issue.body }}\"}
+                  ]
+                }")
+          
+          echo "$RESPONSE"
