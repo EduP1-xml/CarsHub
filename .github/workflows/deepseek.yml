@@ -1,54 +1,33 @@
-name: DeepSeek Task Planner
+name: DeepSeek Autonomous Planner
 
 on:
   issues:
     types: [opened]
 
-permissions:
-  issues: write
-  contents: read
-
 jobs:
-  plan-tasks:
+  create-tasks:
+    # Executa apenas se a Issue contiver a tag [Sprint] no título
+    if: startsWith(github.event.issue.title, '[Sprint]')
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Call DeepSeek API
-        id: deepseek
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install @octokit/rest
+
+      - name: Run DeepSeek Autonomous Task Creator
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        run: |
-          PROMPT="Você é um Tech Lead especialista em Java e Spring Boot. Analise a solicitação abaixo e monte um plano de ação para os desenvolvedores.
-          Divida a demanda em uma checklist de subtarefas claras, mencionando arquivos a criar/modificar no Spring Boot (Controllers, Services, Repositories, DTOs).
-
-          Solicitação:
-          Título: ${{ github.event.issue.title }}
-          Descrição: ${{ github.event.issue.body }}"
-
-          # Escapa caracteres para JSON seguro
-          PAYLOAD=$(jq -n --arg msg "$PROMPT" '{
-            model: "deepseek-chat",
-            messages: [{role: "user", content: $msg}]
-          }')
-
-          RESPONSE=$(curl -s https://api.deepseek.com/chat/completions \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
-            -d "$PAYLOAD")
-
-          # Extrai a resposta e salva na variável do GitHub Actions
-          CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
-          echo "content<<EOF" >> $GITHUB_OUTPUT
-          echo "$CONTENT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Comment on Issue
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          body: |
-            ### 🤖 Plano de Tarefas Gerado pelo DeepSeek:
-
-            ${{ steps.deepseek.outputs.content }}
+          GH_PROJECT_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: node scripts/deepseek-planner.js
