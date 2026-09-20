@@ -1,7 +1,6 @@
 package carshub.com.br.backend.services;
 
 import carshub.com.br.backend.exceptions.CampoObrigatorioException;
-import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.SenhaIncorretaException;
 import carshub.com.br.backend.exceptions.UsuarioNaoEncontradoException;
 import carshub.com.br.backend.models.dtos.LoginDTO;
@@ -13,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-public class AutentificacaoLoginService {
+public class LoginService {
     private final UsuarioRepository usuarioRepository;
 
     public String autenticar(LoginDTO loginDTO) {
