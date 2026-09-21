@@ -1,11 +1,11 @@
-package carshub.com.br.backend.models.dtos.updates;
+package carshub.com.br.backend.models.dtos.perfis.patchs;
 
 
 import carshub.com.br.backend.models.enums.mecanicos.ServicosOfertados;
 
 import java.util.List;
 
-public record MecanicoUpdateDTO(
+public record PerfilMecanicoPatchDTO(
         String nome,
         String senha,
         String telefone,

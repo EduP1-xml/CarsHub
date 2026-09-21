@@ -49,9 +49,9 @@ public class AutentificacaoLoginService {
         // 5. Retorno de Sucesso Formatado
         String subtipo = "";
         if (usuario instanceof PrestadorServico prestador) {
-            subtipo = " (" + prestador.getTipoPrestadorServico() + ")";
+            subtipo = ", com a especificidade de " + prestador.getTipoPrestadorServico();
         }
         return "Login realizado com sucesso! Bem-vindo, " + usuario.getNome() +
-                " registrado com sucesso! ID: " + usuario.getId() + ", seu registro é do tipo:" + usuario.getTipoUsuario();
+                " registrado com sucesso! ID: " + usuario.getId() + ", seu registro é do tipo:" + usuario.getTipoUsuario() + subtipo;
     }
 }
