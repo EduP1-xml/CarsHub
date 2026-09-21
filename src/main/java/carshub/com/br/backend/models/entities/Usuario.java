@@ -2,6 +2,8 @@ package carshub.com.br.backend.models.entities;
 
 
 import carshub.com.br.backend.models.enums.tiposUsuarios.TipoUsuario;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -10,9 +12,14 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.jspecify.annotations.Nullable;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -20,7 +27,7 @@ import java.util.UUID;
 @Inheritance(strategy = InheritanceType.JOINED) // Define a raiz da herança
 @Data
 @NoArgsConstructor
-public abstract class Usuario {
+public class Usuario implements UserDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -60,4 +67,60 @@ public abstract class Usuario {
 
     @Column(name = "dataHora_Usuario", nullable = false)    
     private LocalDateTime dataHora;
+
+    @JsonIgnore
+    private String verificationCode;
+
+    @JsonIgnore
+    private LocalDateTime verificationCodeExpiration;
+
+    private Boolean enabled;
+
+    private String urlFotoPerfil;
+
+    private Double latitude;
+    private Double longitude;
+
+
+    @Override
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return List.of();
+    }
+
+    @Override
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    public @Nullable String getPassword() {
+        return this.senha;
+    }
+
+    @Override
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    public String getUsername() {
+        return this.login;
+    }
+
+    @Override
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    public boolean isAccountNonExpired() {
+        return UserDetails.super.isAccountNonExpired();
+    }
+
+    @Override
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    public boolean isAccountNonLocked() {
+        return UserDetails.super.isAccountNonLocked();
+    }
+
+    @Override
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    public boolean isCredentialsNonExpired() {
+        return UserDetails.super.isCredentialsNonExpired();
+    }
+
+    @Override
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    public boolean isEnabled() {
+        return UserDetails.super.isEnabled();
+    }
 }
