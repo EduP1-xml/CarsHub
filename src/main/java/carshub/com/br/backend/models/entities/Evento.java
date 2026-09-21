@@ -13,6 +13,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 
 import java.math.BigDecimal;
 import java.sql.Types;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
@@ -68,10 +69,18 @@ public class Evento {
     private String bairro;
     // ----------------
 
+    @NotNull(message = "A data e hora de início são obrigatórias")
+    @Column(name = "dataHoraInicio_Evento", nullable = false)
+    private LocalDateTime dataHoraInicio;
+
+    @NotNull(message = "A data e hora de término são obrigatórias")
+    @Column(name = "dataHoraFim_Evento", nullable = false)
+    private LocalDateTime dataHoraFim;
+
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "status_Evento", nullable = false)
-    private StatusEvento status = StatusEvento.ATIVO; // Padrão ao criar é ATIVO
+    private StatusEvento status = StatusEvento.ATIVO;
 
     @NotNull(message = "É necessário ter um organizador vinculado para criar um evento")
     @ManyToOne(optional = false)

@@ -7,19 +7,22 @@ import carshub.com.br.backend.models.enums.eventos.StatusEvento;
 import carshub.com.br.backend.models.enums.inscricoes.StatusInscricao;
 import carshub.com.br.backend.repositories.EventoRepository;
 import carshub.com.br.backend.repositories.InscricaoRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-@RequiredArgsConstructor
 @Service
 public class CatalogoEventoService {
 
     private final EventoRepository eventoRepository;
     private final InscricaoRepository inscricaoRepository;
+
+    public CatalogoEventoService(EventoRepository eventoRepository, InscricaoRepository inscricaoRepository) {
+        this.eventoRepository = eventoRepository;
+        this.inscricaoRepository = inscricaoRepository;
+    }
 
     public List<CatalogoEventoResponseDTO> listarEventosAtivos(UUID idEntusiastaLogado) {
         return eventoRepository.findAllByStatus(StatusEvento.ATIVO).stream()
@@ -54,7 +57,9 @@ public class CatalogoEventoService {
                 evento.getBairro(),
                 evento.getOrganizadorEvento().getNome(),
                 vagasDisponiveis,
-                isInscrito // O Front-end agora sabe se o botão deve ser "Inscrever-se" ou "Inscrito"
+                isInscrito,
+                evento.getDataHoraInicio(),
+                evento.getDataHoraFim()
         );
     }
 }

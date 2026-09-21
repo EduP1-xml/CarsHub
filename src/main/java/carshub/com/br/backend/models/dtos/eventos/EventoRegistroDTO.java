@@ -1,11 +1,9 @@
 package carshub.com.br.backend.models.dtos.eventos;
 
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
+
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 public record EventoRegistroDTO(
         @NotBlank(message = "O nome do evento é obrigatório")
@@ -37,5 +35,13 @@ public record EventoRegistroDTO(
 
         @NotBlank(message = "O bairro é obrigatório")
         @Size(max = 50, message = "O bairro não pode exceder 50 caracteres")
-        String bairro
+        String bairro,
+
+        @NotNull(message = "A data de início é obrigatória")
+        @Future(message = "A data de início deve estar no futuro")
+        LocalDateTime dataHoraInicio,
+
+        @NotNull(message = "A data de término é obrigatória")
+        @Future(message = "A data de fim deve estar no futuro")
+        LocalDateTime dataHoraFim
 ) {}

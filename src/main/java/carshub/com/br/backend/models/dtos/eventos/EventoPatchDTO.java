@@ -1,6 +1,7 @@
 package carshub.com.br.backend.models.dtos.eventos;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 public record EventoPatchDTO(
         String nome,
@@ -10,5 +11,7 @@ public record EventoPatchDTO(
         String rua,
         String numero,
         String complemento,
-        String bairro
+        String bairro,
+        LocalDateTime dataHoraInicio,
+        LocalDateTime dataHoraFim
 ) {}

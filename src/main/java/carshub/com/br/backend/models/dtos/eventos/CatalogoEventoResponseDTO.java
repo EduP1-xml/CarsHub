@@ -1,6 +1,7 @@
 package carshub.com.br.backend.models.dtos.eventos;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 public record CatalogoEventoResponseDTO(
@@ -13,5 +14,7 @@ public record CatalogoEventoResponseDTO(
         String bairro,
         String nomeOrganizador,
         Integer vagasDisponiveis,
-        Boolean inscrito
+        Boolean inscrito,
+        LocalDateTime dataHoraInicio,
+        LocalDateTime dataHoraFim
 ) {}
