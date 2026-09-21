@@ -1,10 +1,11 @@
 package carshub.com.br.backend.services;
 
-import carshub.com.br.backend.exceptions.UsuarioNaoEncontradoException;
-import carshub.com.br.backend.models.dtos.updates.MecanicoUpdateDTO;
+import carshub.com.br.backend.exceptions.PerfilIncompativelException;
+import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
+import carshub.com.br.backend.models.dtos.perfis.patches.PerfilMecanicoPatchDTO;
+import carshub.com.br.backend.models.dtos.perfis.puts.PerfilMecanicoPutDTO;
 import carshub.com.br.backend.models.entities.Mecanico;
 import carshub.com.br.backend.models.entities.PrestadorServico;
-
 import carshub.com.br.backend.repositories.PrestadorServicoRespository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,34 +15,46 @@ import java.util.UUID;
 @Service
 public class MecanicoService {
 
-    private final PrestadorServicoRespository prestadorServicoRespository;
+    private final PrestadorServicoRespository prestadorRepository;
 
-    public MecanicoService(PrestadorServicoRespository prestadorServicoRespository) {
-        this.prestadorServicoRespository = prestadorServicoRespository;
+    public MecanicoService(PrestadorServicoRespository prestadorRepository) {
+        this.prestadorRepository = prestadorRepository;
     }
 
     @Transactional
-    public Mecanico atualizarPerfil(UUID id, MecanicoUpdateDTO dto) {
+    public Mecanico substituirPerfil(UUID id, PerfilMecanicoPutDTO dto) {
+        Mecanico mecanico = buscarEValidarMecanico(id);
 
-        // Busca usando o repositório da superclasse
-        PrestadorServico prestador = prestadorServicoRespository.findById(id)
-                .orElseThrow(() -> new UsuarioNaoEncontradoException("Sessão inválida: Prestador não encontrado."));
+        mecanico.setNome(dto.nome());
+        mecanico.setSenha(dto.senha());
+        mecanico.setTelefone(dto.telefone());
+        mecanico.setServicos(dto.servicosOfertados());
 
-        // Garante que o usuário logado tentando acessar o endpoint de mecânico é, de fato, um mecânico
-        if (!(prestador instanceof Mecanico mecanico)) {
-            throw new RuntimeException("Acesso Negado: O perfil selecionado não é de um Mecânico.");
-        }
+        return prestadorRepository.save(mecanico);
+    }
+
+    @Transactional
+    public Mecanico atualizarPerfilCondicional(UUID id, PerfilMecanicoPatchDTO dto) {
+        Mecanico mecanico = buscarEValidarMecanico(id);
 
         if (dto.nome() != null && !dto.nome().isBlank()) mecanico.setNome(dto.nome());
         if (dto.senha() != null && !dto.senha().isBlank()) mecanico.setSenha(dto.senha());
         if (dto.telefone() != null && !dto.telefone().isBlank()) mecanico.setTelefone(dto.telefone());
 
-
         if (dto.servicosOfertados() != null && !dto.servicosOfertados().isEmpty()) {
             mecanico.setServicos(dto.servicosOfertados());
         }
 
-        // O save() da superclasse sabe persistir a classe filha no banco corretamente
-        return prestadorServicoRespository.save(mecanico);
+        return prestadorRepository.save(mecanico);
+    }
+
+    private Mecanico buscarEValidarMecanico(UUID id) {
+        PrestadorServico prestador = prestadorRepository.findById(id)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Prestador não encontrado."));
+
+        if (!(prestador instanceof Mecanico mecanico)) {
+            throw new PerfilIncompativelException("Acesso Negado: O perfil selecionado não é de um Mecânico.");
+        }
+        return mecanico;
     }
 }

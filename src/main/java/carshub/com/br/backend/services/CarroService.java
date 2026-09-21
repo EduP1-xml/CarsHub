@@ -1,9 +1,11 @@
 package carshub.com.br.backend.services;
 
+import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.PlacaJaCadastradaException;
-import carshub.com.br.backend.exceptions.UsuarioNaoEncontradoException;
+import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
+import carshub.com.br.backend.models.dtos.carros.CarroPatchDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRegistroDTO;
-import carshub.com.br.backend.models.dtos.carros.CarroResponseDTO;
+import carshub.com.br.backend.models.dtos.carros.CarroRespostaDTO;
 import carshub.com.br.backend.models.entities.Carro;
 import carshub.com.br.backend.models.entities.Entusiasta;
 import carshub.com.br.backend.repositories.CarroRepository;
@@ -28,31 +30,31 @@ public class CarroService {
 
     // POST: Criar Carro
     @Transactional
-    public CarroResponseDTO registrarCarro(CarroRegistroDTO dto, UUID entusiastaId) {
+    public CarroRespostaDTO registrarCarro(CarroRegistroDTO dto, UUID entusiastaId) {
         if (carroRepository.existsByPlaca(dto.placa())) {
             throw new PlacaJaCadastradaException("Esta placa já está registrada em outro veículo no CarsHub.");
         }
 
         Entusiasta proprietario = entusiastaRepository.findById(entusiastaId)
-                .orElseThrow(() -> new UsuarioNaoEncontradoException("Sessão inválida: Proprietário não encontrado."));
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Proprietário não encontrado."));
 
         proprietario.criaGaragem();
         entusiastaRepository.save(proprietario);
 
-        Carro carro = mapearDtoParaEntidade(new Carro(), dto);
+        Carro carro = new Carro();
+        mapearRegistroDtoParaEntidade(carro, dto);
         carro.setColecionador(proprietario.getColecionador());
 
         Carro carroSalvo = carroRepository.save(carro);
         return mapearEntidadeParaResponse(carroSalvo, proprietario.getNome());
     }
 
-    // GET: Listar todos os carros do usuário
-    public List<CarroResponseDTO> listarCarrosDoColecionador(UUID entusiastaId) {
+    public List<CarroRespostaDTO> listarCarrosDoColecionador(UUID entusiastaId) {
         Entusiasta proprietario = entusiastaRepository.findById(entusiastaId)
-                .orElseThrow(() -> new UsuarioNaoEncontradoException("Sessão inválida."));
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida."));
 
         if (proprietario.getColecionador() == null) {
-            return List.of(); // Retorna lista vazia se ele ainda não tem coleção
+            return List.of();
         }
 
         return proprietario.getColecionador().getCarros().stream()
@@ -60,25 +62,65 @@ public class CarroService {
                 .collect(Collectors.toList());
     }
 
-    // GET: Buscar um carro específico
-    public CarroResponseDTO buscarCarroPorId(UUID carroId, UUID entusiastaId) {
+    public CarroRespostaDTO buscarCarroPorId(UUID carroId, UUID entusiastaId) {
         Carro carro = verificarPropriedadeDoCarro(carroId, entusiastaId);
         return mapearEntidadeParaResponse(carro, carro.getColecionador().getEntusiasta().getNome());
     }
 
-    // PUT: Atualizar informações do carro
+    // Método PUT: Substituição Completa
     @Transactional
-    public CarroResponseDTO atualizarCarro(UUID carroId, CarroRegistroDTO dto, UUID entusiastaId) {
+    public CarroRespostaDTO substituirCarro(UUID carroId, CarroRegistroDTO dto, UUID entusiastaId) {
         Carro carro = verificarPropriedadeDoCarro(carroId, entusiastaId);
-
         // Verifica se a nova placa não pertence a outro carro
         if (!carro.getPlaca().equals(dto.placa()) && carroRepository.existsByPlaca(dto.placa())) {
             throw new PlacaJaCadastradaException("A nova placa informada já está registrada em outro veículo.");
         }
 
-        carro = mapearDtoParaEntidade(carro, dto);
+        mapearRegistroDtoParaEntidade(carro, dto);
         Carro carroAtualizado = carroRepository.save(carro);
 
+        return mapearEntidadeParaResponse(carroAtualizado, carroAtualizado.getColecionador().getEntusiasta().getNome());
+    }
+
+    // Método PATCH: Atualização Parcial
+    @Transactional
+    public CarroRespostaDTO atualizarCarroCondicional(UUID carroId, CarroPatchDTO dto, UUID entusiastaId) {
+        Carro carro = verificarPropriedadeDoCarro(carroId, entusiastaId);
+
+        if (dto.placa() != null && !dto.placa().isBlank() && !carro.getPlaca().equals(dto.placa())) {
+            if (carroRepository.existsByPlaca(dto.placa())) {
+                throw new PlacaJaCadastradaException("A nova placa informada já está registrada em outro veículo.");
+            }
+            carro.setPlaca(dto.placa());
+        }
+
+        if (dto.marca() != null && !dto.marca().isBlank()) carro.setMarca(dto.marca());
+        if (dto.modelo() != null && !dto.modelo().isBlank()) carro.setModelo(dto.modelo());
+        if (dto.carroceria() != null) carro.setCarroceria(dto.carroceria());
+        if (dto.ano() != null) carro.setAno(dto.ano());
+        if (dto.cor() != null && !dto.cor().isBlank()) carro.setCor(dto.cor());
+        if (dto.quantidadeCilindros() != null) carro.setQuantidadeCilindros(dto.quantidadeCilindros());
+        if (dto.motor() != null) carro.setMotor(dto.motor());
+        if (dto.litragemMotor() != null) carro.setLitragemMotor(dto.litragemMotor());
+        if (dto.injecao() != null) carro.setInjecao(dto.injecao());
+        if (dto.alimentacao() != null) carro.setAlimentacao(dto.alimentacao());
+        if (dto.combustivel() != null) carro.setCombustivel(dto.combustivel());
+        if (dto.cambio() != null) carro.setCambio(dto.cambio());
+        if (dto.tracao() != null) carro.setTracao(dto.tracao());
+        if (dto.suspencao() != null) carro.setSuspencao(dto.suspencao());
+        if (dto.freio() != null) carro.setFreio(dto.freio());
+        if (dto.direcao() != null) carro.setDirecao(dto.direcao());
+        if (dto.roda() != null) carro.setRoda(dto.roda());
+        if (dto.aro() != null) carro.setAro(dto.aro());
+        if (dto.numeroPortas() != null) carro.setNumeroPortas(dto.numeroPortas());
+        if (dto.numeroAssentos() != null) carro.setNumeroAssentos(dto.numeroAssentos());
+        if (dto.materialRevestimentoInterno() != null) carro.setMaterialRevestimentoInterno(dto.materialRevestimentoInterno());
+        if (dto.vidrosEletricos() != null) carro.setVidrosEletricos(dto.vidrosEletricos());
+        if (dto.som() != null) carro.setSom(dto.som());
+        if (dto.arCondicionado() != null) carro.setArCondicionado(dto.arCondicionado());
+        if (dto.tetoSolar() != null) carro.setTetoSolar(dto.tetoSolar());
+
+        Carro carroAtualizado = carroRepository.save(carro);
         return mapearEntidadeParaResponse(carroAtualizado, carroAtualizado.getColecionador().getEntusiasta().getNome());
     }
 
@@ -91,23 +133,22 @@ public class CarroService {
         carroRepository.delete(carro);
         proprietario.getColecionador().getCarros().remove(carro);
 
-        proprietario.verificaExcluiGaragem(); // Regra de negócio em POO atuando!
+        proprietario.verificaExcluiGaragem();
         entusiastaRepository.save(proprietario);
     }
 
-    // MÉTODOS AUXILIARES (Para não repetir código)
-
+    //metodos auxiliares
     private Carro verificarPropriedadeDoCarro(UUID carroId, UUID entusiastaId) {
         Carro carro = carroRepository.findById(carroId)
-                .orElseThrow(() -> new RuntimeException("Carro não encontrado."));
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Carro não encontrado."));
 
         if (!carro.getColecionador().getId().equals(entusiastaId)) {
-            throw new RuntimeException("Acesso Negado: Este veículo não pertence à sua coleção.");
+            throw new PerfilIncompativelException("Acesso Negado: Este veículo não pertence à sua coleção.");
         }
         return carro;
     }
 
-    private Carro mapearDtoParaEntidade(Carro carro, CarroRegistroDTO dto) {
+    private void mapearRegistroDtoParaEntidade(Carro carro, CarroRegistroDTO dto) {
         carro.setMarca(dto.marca());
         carro.setModelo(dto.modelo());
         carro.setCarroceria(dto.carroceria());
@@ -134,11 +175,10 @@ public class CarroService {
         carro.setSom(dto.som());
         carro.setArCondicionado(dto.arCondicionado());
         carro.setTetoSolar(dto.tetoSolar());
-        return carro;
     }
 
-    private CarroResponseDTO mapearEntidadeParaResponse(Carro carro, String nomeProprietario) {
-        return new CarroResponseDTO(
+    private CarroRespostaDTO mapearEntidadeParaResponse(Carro carro, String nomeProprietario) {
+        return new CarroRespostaDTO(
                 carro.getId(),
                 carro.getMarca(),
                 carro.getModelo(),

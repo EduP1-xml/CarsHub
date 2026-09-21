@@ -1,4 +1,4 @@
-package carshub.com.br.backend.models.dtos.eventos.patches;
+package carshub.com.br.backend.models.dtos.eventos;
 
 import java.math.BigDecimal;
 

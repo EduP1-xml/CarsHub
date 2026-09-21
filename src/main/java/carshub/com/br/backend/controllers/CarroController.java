@@ -1,7 +1,8 @@
 package carshub.com.br.backend.controllers;
 
+import carshub.com.br.backend.models.dtos.carros.CarroPatchDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRegistroDTO;
-import carshub.com.br.backend.models.dtos.carros.CarroResponseDTO;
+import carshub.com.br.backend.models.dtos.carros.CarroRespostaDTO;
 import carshub.com.br.backend.services.CarroService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -22,34 +23,45 @@ public class CarroController {
     }
 
     @PostMapping
-    public ResponseEntity<CarroResponseDTO> registrarCarro(
+    public ResponseEntity<CarroRespostaDTO> registrarCarro(
             @RequestHeader("user-id") UUID entusiastaId,
             @Valid @RequestBody CarroRegistroDTO dto) {
-        CarroResponseDTO carroSalvo = carroService.registrarCarro(dto, entusiastaId);
+        CarroRespostaDTO carroSalvo = carroService.registrarCarro(dto, entusiastaId);
         return ResponseEntity.status(HttpStatus.CREATED).body(carroSalvo);
     }
 
     @GetMapping
-    public ResponseEntity<List<CarroResponseDTO>> listarCarros(
+    public ResponseEntity<List<CarroRespostaDTO>> listarCarros(
             @RequestHeader("user-id") UUID entusiastaId) {
-        List<CarroResponseDTO> carros = carroService.listarCarrosDoColecionador(entusiastaId);
+        List<CarroRespostaDTO> carros = carroService.listarCarrosDoColecionador(entusiastaId);
         return ResponseEntity.ok(carros);
     }
 
     @GetMapping("/{idCarro}")
-    public ResponseEntity<CarroResponseDTO> buscarCarro(
+    public ResponseEntity<CarroRespostaDTO> buscarCarro(
             @PathVariable UUID idCarro,
             @RequestHeader("user-id") UUID entusiastaId) {
-        CarroResponseDTO carro = carroService.buscarCarroPorId(idCarro, entusiastaId);
+        CarroRespostaDTO carro = carroService.buscarCarroPorId(idCarro, entusiastaId);
         return ResponseEntity.ok(carro);
     }
 
+    // PUT: Substituição completa do carro
     @PutMapping("/{idCarro}")
-    public ResponseEntity<CarroResponseDTO> atualizarCarro(
+    public ResponseEntity<CarroRespostaDTO> substituirCarro(
             @PathVariable UUID idCarro,
             @RequestHeader("user-id") UUID entusiastaId,
             @Valid @RequestBody CarroRegistroDTO dto) {
-        CarroResponseDTO carroAtualizado = carroService.atualizarCarro(idCarro, dto, entusiastaId);
+        CarroRespostaDTO carroAtualizado = carroService.substituirCarro(idCarro, dto, entusiastaId);
+        return ResponseEntity.ok(carroAtualizado);
+    }
+
+    // PATCH: Edição independente de campos
+    @PatchMapping("/{idCarro}")
+    public ResponseEntity<CarroRespostaDTO> atualizarCarroParcial(
+            @PathVariable UUID idCarro,
+            @RequestHeader("user-id") UUID entusiastaId,
+            @RequestBody CarroPatchDTO dto) {
+        CarroRespostaDTO carroAtualizado = carroService.atualizarCarroCondicional(idCarro, dto, entusiastaId);
         return ResponseEntity.ok(carroAtualizado);
     }
 

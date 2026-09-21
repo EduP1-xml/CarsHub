@@ -1,0 +1,60 @@
+package carshub.com.br.backend.services;
+
+import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
+import carshub.com.br.backend.models.dtos.eventos.CatalogoEventoResponseDTO;
+import carshub.com.br.backend.models.entities.Evento;
+import carshub.com.br.backend.models.enums.eventos.StatusEvento;
+import carshub.com.br.backend.models.enums.inscricoes.StatusInscricao;
+import carshub.com.br.backend.repositories.EventoRepository;
+import carshub.com.br.backend.repositories.InscricaoRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+@RequiredArgsConstructor
+@Service
+public class CatalogoEventoService {
+
+    private final EventoRepository eventoRepository;
+    private final InscricaoRepository inscricaoRepository;
+
+    public List<CatalogoEventoResponseDTO> listarEventosAtivos(UUID idEntusiastaLogado) {
+        return eventoRepository.findAllByStatus(StatusEvento.ATIVO).stream()
+                .map(evento -> montarDTO(evento, idEntusiastaLogado))
+                .collect(Collectors.toList());
+    }
+
+    public CatalogoEventoResponseDTO buscarDetalhesEvento(UUID idEvento, UUID idEntusiastaLogado) {
+        Evento evento = eventoRepository.findById(idEvento)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado."));
+
+        return montarDTO(evento, idEntusiastaLogado);
+    }
+
+    private CatalogoEventoResponseDTO montarDTO(Evento evento, UUID idEntusiastaLogado) {
+        int vagasOcupadas = inscricaoRepository.countByEvento_IdEventoAndStatus(evento.getIdEvento(), StatusInscricao.CONFIRMADA);
+        int vagasDisponiveis = Math.max(0, evento.getLimiteParticipantes() - vagasOcupadas);
+
+        boolean isInscrito = false;
+        if (idEntusiastaLogado != null) {
+            isInscrito = inscricaoRepository.existsByEntusiasta_IdAndEvento_IdEventoAndStatus(
+                    idEntusiastaLogado, evento.getIdEvento(), StatusInscricao.CONFIRMADA);
+        }
+
+        return new CatalogoEventoResponseDTO(
+                evento.getIdEvento(),
+                evento.getNome(),
+                evento.getDescricao(),
+                evento.getPreco(),
+                evento.getRua(),
+                evento.getNumero(),
+                evento.getBairro(),
+                evento.getOrganizadorEvento().getNome(),
+                vagasDisponiveis,
+                isInscrito // O Front-end agora sabe se o botão deve ser "Inscrever-se" ou "Inscrito"
+        );
+    }
+}

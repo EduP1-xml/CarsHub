@@ -1,4 +1,19 @@
 package carshub.com.br.backend.models.dtos.eventos;
 
-public record EventoRespostaDTO() {
-}
+import carshub.com.br.backend.models.enums.eventos.StatusEvento;
+import java.math.BigDecimal;
+import java.util.UUID;
+
+public record EventoRespostaDTO(
+        UUID idEvento,
+        String nome,
+        BigDecimal preco,
+        String descricao,
+        Integer limiteParticipantes,
+        String rua,
+        String numero,
+        String complemento,
+        String bairro,
+        StatusEvento status,
+        String nomeOrganizador
+) {}

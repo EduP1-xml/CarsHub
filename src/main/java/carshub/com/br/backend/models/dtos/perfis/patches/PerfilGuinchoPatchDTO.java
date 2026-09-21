@@ -1,4 +1,4 @@
-package carshub.com.br.backend.models.dtos.perfis.patchs;
+package carshub.com.br.backend.models.dtos.perfis.patches;
 
 public record PerfilGuinchoPatchDTO(
         String nome,

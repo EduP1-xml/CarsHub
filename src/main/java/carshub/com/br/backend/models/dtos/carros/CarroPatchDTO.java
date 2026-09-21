@@ -1,4 +1,4 @@
-package carshub.com.br.backend.models.dtos.carros.patches;
+package carshub.com.br.backend.models.dtos.carros;
 
 import carshub.com.br.backend.models.enums.carros.*;
 import java.math.BigDecimal;

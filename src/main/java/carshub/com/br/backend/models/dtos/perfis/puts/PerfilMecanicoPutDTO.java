@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-public record PerfilMecanicoDTO(
+public record PerfilMecanicoPutDTO(
         @NotBlank(message = "O nome é obrigatório") @Size(max = 100) String nome,
         @NotBlank(message = "A senha é obrigatória") @Size(min = 8) String senha,
         @NotBlank(message = "O telefone é obrigatório") @Size(max = 17) String telefone,

@@ -14,6 +14,8 @@ import java.util.Map;
 @RestControllerAdvice
 @Slf4j
 public class GlobalException {
+    //Penso em alterar essa classe, para que os erros fiquem o mais genéricos possíveis, tendo apensas 1 por tipo de erro,
+    // sendo diferenciados apenas pelas mensagens que serão retornadas;
 
     // 1. Captura os erros disparados pelo @Valid nos Controllers (Status 400 - Bad Request)
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -25,9 +27,8 @@ public class GlobalException {
         return ResponseEntity.badRequest().body(errors);
     }
 
-    // Captura usuário não encontrado (Status 404 - Not Found)
-    @ExceptionHandler(UsuarioNaoEncontradoException.class)
-    public ResponseEntity<String> usuarioNaoEncontrado(UsuarioNaoEncontradoException ex) {
+    @ExceptionHandler(RecursoNaoEncontradoException.class)
+    public ResponseEntity<String> recursoNaoEncontrado(RecursoNaoEncontradoException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
     }
 
@@ -63,6 +64,12 @@ public class GlobalException {
     @ExceptionHandler(PerfilIncompativelException.class)
     public ResponseEntity<String> perfilIncompativel(PerfilIncompativelException ex){
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ex.getMessage());
+    }
+
+    // Captura violações de regra de negócio (Status 422 - Unprocessable Content)
+    @ExceptionHandler(RegraDeNegocioException.class)
+    public ResponseEntity<String> regraDeNegocio(RegraDeNegocioException ex){
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).body(ex.getMessage());
     }
 
     //FILTRO DE SEGURANÇA: Captura qualquer outro erro inesperado (Status 500 - Internal Server Error) e salva os logs de forma estruturada
