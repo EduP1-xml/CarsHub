@@ -13,6 +13,13 @@ import org.springframework.web.bind.annotation.*;
 public class LoginController {
 
     private final LoginService loginService;
+<<<<<<< HEAD
+=======
+
+    public LoginController(LoginService loginService) {
+        this.loginService = loginService;
+    }
+>>>>>>> 3c58334c6ea0f92faa5df94b19ded8b805b7f54e
 
     @PostMapping("/login")
     public ResponseEntity<String> login(@Valid @RequestBody LoginDTO loginDTO) {

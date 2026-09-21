@@ -8,26 +8,23 @@ import carshub.com.br.backend.models.dtos.CadastroDTO;
 import carshub.com.br.backend.models.entities.*;
 import carshub.com.br.backend.models.enums.tiposUsuarios.TipoPrestadorServico;
 import carshub.com.br.backend.repositories.*;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 @Service
+@RequiredArgsConstructor
 public class CadastroService {
     private final UsuarioRepository usuarioRepository;
     private final EntusiastaRepository entusiastaRepository;
     private final OrganizadorEventoRepository organizadorEventoRepository;
     private final PrestadorServicoRespository prestadorServicoRespository;
     private final GuinchoRepository guinchoRepository;
-
-    public CadastroService(UsuarioRepository usuarioRepository, EntusiastaRepository entusiastaRepository, OrganizadorEventoRepository organizadorEventoRepository, PrestadorServicoRespository prestadorServicoRespository, GuinchoRepository guinchoRepository) {
-        this.usuarioRepository = usuarioRepository;
-        this.entusiastaRepository = entusiastaRepository;
-        this.organizadorEventoRepository = organizadorEventoRepository;
-        this.prestadorServicoRespository = prestadorServicoRespository;
-        this.guinchoRepository = guinchoRepository;
-    }
+    private final PasswordEncoder encoder;
 
     public Usuario registrarUsuario(CadastroDTO cadastroDTO) {
         Optional<Usuario> existUser = usuarioRepository.findByLogin(cadastroDTO.login());
@@ -41,16 +38,26 @@ public class CadastroService {
         }
 
         Usuario novoUsuario = instanciarUsuarioPorTipo(cadastroDTO);
+        validaSenha(cadastroDTO.senha());
+        String senhaEnconde = encoder.encode(cadastroDTO.senha());
 
         novoUsuario.setNome(cadastroDTO.nome());
         novoUsuario.setLogin(cadastroDTO.login());
-        novoUsuario.setSenha(cadastroDTO.senha());
+        novoUsuario.setSenha(senhaEnconde);
         novoUsuario.setDataNascimento(cadastroDTO.dataNascimento());
         novoUsuario.setTipoUsuario(cadastroDTO.tipoUsuario());
         novoUsuario.setTelefone(cadastroDTO.telefone());
         novoUsuario.setDataHora(LocalDateTime.now());
 
         return usuarioRepository.save(novoUsuario);
+    }
+
+    public void validaSenha(String senha) {
+        String SENHA_REGEX = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$";
+        Pattern SENHA_PATTERN = Pattern.compile(SENHA_REGEX);
+        if (senha == null || !SENHA_PATTERN.matcher(senha).matches()) {
+            throw new IllegalArgumentException("A senha deve ter no mínimo 8 caracteres, uma letra maiúscula, uma minúscula, um número e um caractere especial");
+        }
     }
 
     private Usuario instanciarUsuarioPorTipo(CadastroDTO dto) {
