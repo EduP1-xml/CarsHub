@@ -1,6 +1,27 @@
 spring:
   application:
     name: backend
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 15MB
+app:
+  upload:
+    dir: ${APP_UPLOAD_DIR:uploads}
+
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: danzinxeats@gmail.com
+    password: mhcz bfde hmfx cnbi
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
 
   datasource:
     # A flag createDatabaseIfNotExist cria o schema automaticamente caso ele não exista

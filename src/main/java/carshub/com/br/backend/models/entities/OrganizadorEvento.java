@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public class OrganizadorEvento extends Usuario {
+public abstract class OrganizadorEvento extends Usuario {
 
     @NotBlank(message = "O CNPJ é obrigatório para realização de atividades comerciais")
     @Pattern(regexp = "\\d{14}", message = "O CNPJ deve conter 14 dígitos numéricos")

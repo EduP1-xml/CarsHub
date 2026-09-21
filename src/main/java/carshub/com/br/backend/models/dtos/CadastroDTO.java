@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 
@@ -22,5 +23,7 @@ public record CadastroDTO(
         String cnpj,
         String placa,
         TipoPrestadorServico tipoPrestadorServico,
-        List<ServicosOfertados> servicosOfertados
+        List<ServicosOfertados> servicosOfertados,
+        String verificationCode,
+        LocalDateTime verificationCodeExpiration
 ) {}

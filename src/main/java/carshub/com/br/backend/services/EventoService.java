@@ -30,8 +30,7 @@ public class EventoService {
 
     @Transactional
     public EventoRespostaDTO criarEvento(EventoRegistroDTO dto, UUID organizadorId) {
-        OrganizadorEvento organizador = organizadorRepository.findById(organizadorId)
-                .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Organizador não encontrado."));
+        OrganizadorEvento organizador = organizadorRepository.findById(organizadorId).orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Organizador não encontrado."));
 
         Evento evento = new Evento();
         mapearRegistroDtoParaEntidade(evento, dto);
@@ -105,8 +104,7 @@ public class EventoService {
     // MÉTODOS AUXILIARES
 
     private Evento verificarPropriedadeDoEvento(UUID eventoId, UUID organizadorId) {
-        Evento evento = eventoRepository.findById(eventoId)
-                .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado no sistema."));
+        Evento evento = eventoRepository.findById(eventoId).orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado no sistema."));
 
         if (!evento.getOrganizadorEvento().getId().equals(organizadorId)) {
             throw new PerfilIncompativelException("Acesso Negado: Você não tem permissão para modificar um evento que pertence a outro organizador.");
