@@ -77,4 +77,6 @@ public class Evento {
     @ManyToOne(optional = false)
     @JoinColumn(name = "id_OrganizadorEvento_Evento", referencedColumnName = "id_OrganizadorEvento", nullable = false)
     private OrganizadorEvento organizadorEvento;
+
+    private String urlFotoEvento;
 }

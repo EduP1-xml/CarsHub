@@ -27,6 +27,7 @@ import java.util.regex.Pattern;
 @Service
 @RequiredArgsConstructor
 public class CadastroService implements UserDetailsService {
+
     private final UsuarioRepository usuarioRepository;
     private final EntusiastaRepository entusiastaRepository;
     private final OrganizadorEventoRepository organizadorEventoRepository;
@@ -35,19 +36,14 @@ public class CadastroService implements UserDetailsService {
     private final PasswordEncoder encoder;
     private final EmailSenha emailSenha;
     private final EmailService emailService;
+
     @Lazy
     @Autowired
     private AuthenticationManager authenticationManager;
 
-
-
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        Usuario user = (Usuario) usuarioRepository.findByEmail(email);
-        if (user == null) {
-            throw new UsernameNotFoundException("Usuário não encontrado com o email: " + email);
-        }
-        return user;
+        return usuarioRepository.findByLogin(email).orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado com o email: " + email));
     }
 
     public void registrarUsuario(Usuario novoUsuario) {
@@ -101,11 +97,8 @@ public class CadastroService implements UserDetailsService {
 
     @Transactional
     public void verifyRegister(String email, String code) {
-        Usuario existUser = (Usuario) usuarioRepository.findByEmail(email);
-
-        if (existUser == null) {
-            throw new IllegalArgumentException("Usuário não encontrado ou já verificado.");
-        }
+        // CORRIGIDO: Usando findByLogin e tratando o Optional
+        Usuario existUser = usuarioRepository.findByLogin(email).orElseThrow(() -> new IllegalArgumentException("Usuário não encontrado ou já verificado."));
 
         if (existUser.getVerificationCode() == null || !existUser.getVerificationCode().equals(code)) {
             throw new IllegalArgumentException("Código de verificação inválido.");

@@ -37,5 +37,7 @@ public record EventoRegistroDTO(
 
         @NotBlank(message = "O bairro é obrigatório")
         @Size(max = 50, message = "O bairro não pode exceder 50 caracteres")
-        String bairro
+        String bairro,
+
+        String urlFotoEvento
 ) {}

@@ -1,0 +1,34 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: carshub-db
+    restart: always
+    environment:
+      MYSQL_DATABASE: carshub
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  backend:
+    build: . # Pressupõe que você tem um Dockerfile na mesma pasta
+    container_name: carshub-backend
+    restart: on-failure
+    ports:
+      - "8080:8080" # Porta padrão do Spring Boot
+    environment:
+      # O Docker usa o nome do serviço (db) em vez de localhost
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/carshub?createDatabaseIfNotExist=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      APP_UPLOAD_DIR: /app/uploads
+    volumes:
+      # Mapeia a pasta de uploads do container para o seu computador local
+      - ./uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_started
+
+volumes:
+  mysql_data: # Mantém os dados do banco a salvo mesmo se o container parar

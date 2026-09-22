@@ -3,12 +3,17 @@ package carshub.com.br.backend.controllers;
 import carshub.com.br.backend.models.dtos.eventos.EventoPatchDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRegistroDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRespostaDTO;
+import carshub.com.br.backend.models.entities.OrganizadorEvento;
+import carshub.com.br.backend.models.entities.Usuario;
 import carshub.com.br.backend.models.enums.eventos.StatusEvento;
 import carshub.com.br.backend.services.EventoService;
+import jakarta.mail.Multipart;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -23,11 +28,9 @@ public class EventoController {
         this.eventoService = eventoService;
     }
 
-    @PostMapping
-    public ResponseEntity<EventoRespostaDTO> criarEvento(
-            @RequestHeader("user-id") UUID organizadorId,
-            @Valid @RequestBody EventoRegistroDTO dto) {
-        EventoRespostaDTO eventoSalvo = eventoService.criarEvento(dto, organizadorId);
+    @PostMapping(consumes = {"multipart/form-data"})
+    public ResponseEntity<EventoRespostaDTO> criarEvento(@RequestPart("data") @Valid  EventoRegistroDTO data, @RequestPart(value = "file", required = false) MultipartFile file, @AuthenticationPrincipal OrganizadorEvento usuario) {
+        EventoRespostaDTO eventoSalvo = eventoService.criarEvento(data, file,  usuario.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(eventoSalvo);
     }
 

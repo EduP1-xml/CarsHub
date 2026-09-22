@@ -10,31 +10,40 @@ import carshub.com.br.backend.models.entities.OrganizadorEvento;
 import carshub.com.br.backend.models.enums.eventos.StatusEvento;
 import carshub.com.br.backend.repositories.EventoRepository;
 import carshub.com.br.backend.repositories.OrganizadorEventoRepository;
+import carshub.com.br.backend.services.file.FileStorageService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class EventoService {
 
     private final EventoRepository eventoRepository;
     private final OrganizadorEventoRepository organizadorRepository;
+    private final FileStorageService fileStorageService;
 
-    public EventoService(EventoRepository eventoRepository, OrganizadorEventoRepository organizadorRepository) {
-        this.eventoRepository = eventoRepository;
-        this.organizadorRepository = organizadorRepository;
-    }
 
     @Transactional
-    public EventoRespostaDTO criarEvento(EventoRegistroDTO dto, UUID organizadorId) {
+    public EventoRespostaDTO criarEvento(EventoRegistroDTO dto, MultipartFile file, UUID organizadorId) {
         OrganizadorEvento organizador = organizadorRepository.findById(organizadorId).orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Organizador não encontrado."));
 
         Evento evento = new Evento();
         mapearRegistroDtoParaEntidade(evento, dto);
         evento.setOrganizadorEvento(organizador);
+
+        if (file != null && !file.isEmpty()) {
+            String fileDownloadUri = fileStorageService.salvarArquivo(file);
+            evento.setUrlFotoEvento(fileDownloadUri);
+        }
+        else if (dto.urlFotoEvento() != null && !dto.urlFotoEvento().isEmpty()){
+            evento.setUrlFotoEvento(dto.urlFotoEvento());
+        }
 
         Evento eventoSalvo = eventoRepository.save(evento);
         return mapearEntidadeParaResponse(eventoSalvo);
