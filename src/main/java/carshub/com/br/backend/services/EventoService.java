@@ -1,5 +1,5 @@
 package carshub.com.br.backend.services;
-;
+
 import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.exceptions.RegraDeNegocioException;
@@ -11,7 +11,6 @@ import carshub.com.br.backend.models.entities.OrganizadorEvento;
 import carshub.com.br.backend.models.enums.eventos.StatusEvento;
 import carshub.com.br.backend.repositories.EventoRepository;
 import carshub.com.br.backend.repositories.OrganizadorEventoRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,22 +20,22 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class EventoService {
 
     private final EventoRepository eventoRepository;
     private final OrganizadorEventoRepository organizadorRepository;
 
+    public EventoService(EventoRepository eventoRepository, OrganizadorEventoRepository organizadorRepository) {
+        this.eventoRepository = eventoRepository;
+        this.organizadorRepository = organizadorRepository;
+    }
+
     @Transactional
     public EventoRespostaDTO criarEvento(EventoRegistroDTO dto, UUID organizadorId) {
-<<<<<<< HEAD
         validarConflitoDeDatas(dto.dataHoraInicio(), dto.dataHoraFim());
 
         OrganizadorEvento organizador = organizadorRepository.findById(organizadorId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Organizador não encontrado."));
-=======
-        OrganizadorEvento organizador = organizadorRepository.findById(organizadorId).orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Organizador não encontrado."));
->>>>>>> f65249c7e34be2122f542a11bc66338e92c0d478
 
         Evento evento = new Evento();
         mapearRegistroDtoParaEntidade(evento, dto);
@@ -121,7 +120,8 @@ public class EventoService {
     // ========================================================
 
     private Evento verificarPropriedadeDoEvento(UUID eventoId, UUID organizadorId) {
-        Evento evento = eventoRepository.findById(eventoId).orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado no sistema."));
+        Evento evento = eventoRepository.findById(eventoId)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado no sistema."));
 
         if (!evento.getOrganizadorEvento().getId().equals(organizadorId)) {
             throw new PerfilIncompativelException("Acesso Negado: Você não tem permissão para modificar um evento que pertence a outro organizador.");

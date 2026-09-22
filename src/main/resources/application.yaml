@@ -27,7 +27,7 @@ app:
     # A flag createDatabaseIfNotExist cria o schema automaticamente caso ele não exista
     url: jdbc:mysql://localhost:3306/carshub?createDatabaseIfNotExist=true&serverTimezone=UTC
     username: root
-    password: root
+    password: "@BMW_e36+XT660"
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:

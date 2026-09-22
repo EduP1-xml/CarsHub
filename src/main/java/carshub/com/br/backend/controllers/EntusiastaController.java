@@ -2,8 +2,6 @@ package carshub.com.br.backend.controllers;
 
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilEntusiastaPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilEntusiastaPutDTO;
-import carshub.com.br.backend.models.dtos.updates.EntusiastaPutDTO;
-import carshub.com.br.backend.models.dtos.updates.EntusiastaUpdateDTO;
 import carshub.com.br.backend.services.EntusiastaService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
