@@ -51,8 +51,7 @@ public class GuinchoService {
     }
 
     private Guincho buscarGuinchoOuLancarExcecao(UUID id) {
-        return guinchoRepository.findById(id)
-                .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Guincho não encontrado."));
+        return guinchoRepository.findById(id).orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Guincho não encontrado."));
     }
 
     private void validarDuplicidadePlaca(String novaPlaca, String placaAtual) {

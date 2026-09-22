@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.GrantedAuthority;
@@ -65,7 +66,8 @@ public class Usuario implements UserDetails {
     @Column(name = "tipoUsuario_Usuario", nullable = false)
     private TipoUsuario tipoUsuario;
 
-    @Column(name = "dataHora_Usuario", nullable = false)    
+    @CreationTimestamp
+    @Column(name = "data_hora_usuario", nullable = false, updatable = false, columnDefinition = "DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6)")
     private LocalDateTime dataHora;
 
     @JsonIgnore
