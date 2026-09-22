@@ -54,13 +54,4 @@ public class LoginController {
         }
     }
 
-    @PutMapping("/update-loc")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> atualizarLoc(@RequestBody LatitudeLogintudeDTO dados, @AuthenticationPrincipal Usuario userAuthenticated) {
-        Usuario updateLoc = loginService.updateLoc(dados, userAuthenticated);
-        if (updateLoc != null) {
-            return ResponseEntity.noContent().build();
-        }
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-    }
 }

@@ -4,6 +4,7 @@ import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record EventoRegistroDTO(
         @NotBlank(message = "O nome do evento é obrigatório")
@@ -44,5 +45,5 @@ public record EventoRegistroDTO(
         @NotNull(message = "A data de término é obrigatória")
         @Future(message = "A data de fim deve estar no futuro")
         LocalDateTime dataHoraFim,
-        String urlFotoEvento
+        List<String> urlFotoEvento
 ) {}

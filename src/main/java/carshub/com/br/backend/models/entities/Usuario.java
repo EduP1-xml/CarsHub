@@ -78,9 +78,6 @@ public class Usuario implements UserDetails {
 
     private String urlFotoPerfil;
 
-    private Double latitude;
-    private Double longitude;
-
 
     @Override
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)

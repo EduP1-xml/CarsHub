@@ -22,4 +22,7 @@ public class Mecanico extends PrestadorServico {
     @CollectionTable(name = "ServicosOfertados_Mecanico", joinColumns = @JoinColumn(name = "id_Mecanico"))
     @Column(name = "servicos_Mecanico")
     private List<ServicosOfertados> servicos;
+
+    private Double latitude;
+    private Double longitude;
 }

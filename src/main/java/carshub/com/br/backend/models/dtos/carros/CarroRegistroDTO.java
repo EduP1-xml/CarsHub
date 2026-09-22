@@ -3,6 +3,7 @@ package carshub.com.br.backend.models.dtos.carros;
 import carshub.com.br.backend.models.enums.carros.*;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
+import java.util.List;
 
 public record CarroRegistroDTO(
         @NotBlank(message = "A marca é obrigatória") String marca,
@@ -30,5 +31,6 @@ public record CarroRegistroDTO(
         @NotNull Boolean vidrosEletricos,
         @NotNull Boolean som,
         @NotNull Boolean arCondicionado,
-        @NotNull Boolean tetoSolar
+        @NotNull Boolean tetoSolar,
+        @NotNull List<String> urlFotoCarro
 ) {}

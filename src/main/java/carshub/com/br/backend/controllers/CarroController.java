@@ -3,11 +3,17 @@ package carshub.com.br.backend.controllers;
 import carshub.com.br.backend.models.dtos.carros.CarroPatchDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRegistroDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRespostaDTO;
+import carshub.com.br.backend.models.dtos.eventos.EventoRegistroDTO;
+import carshub.com.br.backend.models.entities.Colecionador;
+import carshub.com.br.backend.models.entities.Entusiasta;
+import carshub.com.br.backend.models.entities.OrganizadorEvento;
 import carshub.com.br.backend.services.CarroService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -23,10 +29,8 @@ public class CarroController {
     }
 
     @PostMapping
-    public ResponseEntity<CarroRespostaDTO> registrarCarro(
-            @RequestHeader("user-id") UUID entusiastaId,
-            @Valid @RequestBody CarroRegistroDTO dto) {
-        CarroRespostaDTO carroSalvo = carroService.registrarCarro(dto, entusiastaId);
+    public ResponseEntity<CarroRespostaDTO> registrarCarro(@RequestPart("data") @Valid CarroRegistroDTO data, @RequestPart(value = "file", required = false) List<MultipartFile> files, @AuthenticationPrincipal Entusiasta usuario) {
+        CarroRespostaDTO carroSalvo = carroService.registrarCarro(data, files,  usuario.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(carroSalvo);
     }
 

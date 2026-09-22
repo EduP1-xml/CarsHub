@@ -14,6 +14,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import java.math.BigDecimal;
 import java.sql.Types;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -87,5 +88,8 @@ public class Evento {
     @JoinColumn(name = "id_OrganizadorEvento_Evento", referencedColumnName = "id_OrganizadorEvento", nullable = false)
     private OrganizadorEvento organizadorEvento;
 
-    private String urlFotoEvento;
+    private List<String> urlFotoEvento;
+
+    private Double latitude;
+    private Double longitude;
 }

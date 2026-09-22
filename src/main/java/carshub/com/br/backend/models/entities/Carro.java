@@ -7,7 +7,10 @@ import jakarta.validation.constraints.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.springframework.web.multipart.MultipartFile;
+
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -157,4 +160,6 @@ public class Carro {
     @ManyToOne(optional = false)
     @JoinColumn(name = "idColecionador_Carro", referencedColumnName = "id_Colecionador", nullable = false)
     private Colecionador colecionador;
+
+    private List<String> fotosCarro;
 }

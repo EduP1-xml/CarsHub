@@ -3,6 +3,7 @@ package carshub.com.br.backend.controllers;
 import carshub.com.br.backend.models.dtos.eventos.EventoPatchDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRegistroDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRespostaDTO;
+import carshub.com.br.backend.models.entities.Entusiasta;
 import carshub.com.br.backend.models.entities.OrganizadorEvento;
 import carshub.com.br.backend.models.entities.Usuario;
 import carshub.com.br.backend.models.enums.eventos.StatusEvento;
@@ -29,8 +30,8 @@ public class EventoController {
     }
 
     @PostMapping(consumes = {"multipart/form-data"})
-    public ResponseEntity<EventoRespostaDTO> criarEvento(@RequestPart("data") @Valid  EventoRegistroDTO data, @RequestPart(value = "file", required = false) MultipartFile file, @AuthenticationPrincipal OrganizadorEvento usuario) {
-        EventoRespostaDTO eventoSalvo = eventoService.criarEvento(data, file,  usuario.getId());
+    public ResponseEntity<EventoRespostaDTO> criarEvento(@RequestPart("data") @Valid  EventoRegistroDTO data, @RequestPart(value = "file", required = false) List<MultipartFile> files, @AuthenticationPrincipal Entusiasta usuario) {
+        EventoRespostaDTO eventoSalvo = eventoService.criarEvento(data, files,  usuario.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(eventoSalvo);
     }
 

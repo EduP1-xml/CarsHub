@@ -2,6 +2,7 @@ package carshub.com.br.backend.models.dtos.carros;
 
 import carshub.com.br.backend.models.enums.carros.*;
 import java.math.BigDecimal;
+import java.util.List;
 
 public record CarroPatchDTO(
         String marca,
@@ -29,5 +30,6 @@ public record CarroPatchDTO(
         Boolean vidrosEletricos,
         Boolean som,
         Boolean arCondicionado,
-        Boolean tetoSolar
+        Boolean tetoSolar,
+        List<String> fotosCarro
 ) {}

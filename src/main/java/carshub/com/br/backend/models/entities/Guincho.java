@@ -22,4 +22,7 @@ public class Guincho extends PrestadorServico {
     @Pattern(regexp = "^[A-Za-z0-9]{7}$", message = "A placa deve conter exatamente 7 caracteres alfanuméricos")
     @Column(name = "placa_Guincho", length = 7, unique = true, nullable = false)
     private String placa;
+
+    private Double latitude;
+    private Double longitude;
 }

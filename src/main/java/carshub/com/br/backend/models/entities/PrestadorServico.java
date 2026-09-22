@@ -28,4 +28,7 @@ public abstract class PrestadorServico extends Usuario{
     @Enumerated(EnumType.STRING)// só definindo a forma de armazenamento desse Enum
     @Column(name = "tipoPrestadorServico_PrestadorServico", nullable = false)
     private TipoPrestadorServico tipoPrestadorServico;
+
+    private Double latitude;
+    private Double longitude;
 }

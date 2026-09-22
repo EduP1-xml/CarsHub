@@ -1,9 +1,11 @@
 package carshub.com.br.backend.services;
 
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
+import carshub.com.br.backend.models.dtos.LatitudeLogintudeDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilEntusiastaPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilEntusiastaPutDTO;
 import carshub.com.br.backend.models.entities.Entusiasta;
+import carshub.com.br.backend.models.entities.Usuario;
 import carshub.com.br.backend.repositories.EntusiastaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -45,5 +47,20 @@ public class EntusiastaService {
     private Entusiasta buscarEntusiastaOuLancarExcecao(UUID id) {
         return entusiastaRepository.findById(id)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Entusiasta não encontrado."));
+    }
+
+    public Entusiasta updateLoc(LatitudeLogintudeDTO dados, Entusiasta usuarioAutenticado) {
+        Entusiasta entity = entusiastaRepository.findById(usuarioAutenticado.getId()).orElseThrow(() -> new RuntimeException("Perfil não encontrado!"));
+        updateLocs(entity, dados);
+        return entusiastaRepository.save(entity);
+    }
+
+    private void updateLocs(Entusiasta entity, LatitudeLogintudeDTO dados) {
+        if (dados.latitude() != null) {
+            entity.setLatitude(dados.latitude());
+        }
+        if (dados.longitude() != null) {
+            entity.setLongitude(dados.longitude());
+        }
     }
 }

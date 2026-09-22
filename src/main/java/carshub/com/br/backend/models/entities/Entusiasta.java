@@ -32,6 +32,9 @@ public class Entusiasta extends Usuario {
     @OneToOne(mappedBy = "entusiasta", cascade = CascadeType.ALL, orphanRemoval = true)
     private Colecionador colecionador;
 
+    private Double latitude;
+    private Double longitude;
+
     // ========================================================
     // MÉTODOS DE REGRA DE NEGÓCIO (POO)
     // ========================================================

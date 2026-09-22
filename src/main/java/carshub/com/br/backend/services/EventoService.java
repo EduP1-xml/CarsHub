@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -32,21 +33,27 @@ public class EventoService {
 
 
     @Transactional
-    public EventoRespostaDTO criarEvento(EventoRegistroDTO dto, MultipartFile file, UUID organizadorId) {
+    public EventoRespostaDTO criarEvento(EventoRegistroDTO dto, List<MultipartFile>  files, UUID organizadorId) {
         OrganizadorEvento organizador = organizadorRepository.findById(organizadorId).orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Organizador não encontrado."));
+
+        if (files != null && files.size() > 3) {
+            throw new IllegalArgumentException("É permitido enviar no máximo 3 fotos por evento.");
+        }
 
         Evento evento = new Evento();
         mapearRegistroDtoParaEntidade(evento, dto);
         evento.setOrganizadorEvento(organizador);
 
-        if (file != null && !file.isEmpty()) {
-            String fileDownloadUri = fileStorageService.salvarArquivo(file);
-            evento.setUrlFotoEvento(fileDownloadUri);
+        List<String> todasAsUrls = new ArrayList<>();
+        if (files != null && !files.isEmpty()) {
+            for (MultipartFile file : files) {
+                if (file != null && !file.isEmpty()) {
+                    String fileDownloadUri = fileStorageService.salvarArquivo(file);
+                    todasAsUrls.add(fileDownloadUri);
+                }
+            }
         }
-        else if (dto.urlFotoEvento() != null && !dto.urlFotoEvento().isEmpty()){
-            evento.setUrlFotoEvento(dto.urlFotoEvento());
-        }
-
+        evento.setUrlFotoEvento(todasAsUrls);
         Evento eventoSalvo = eventoRepository.save(evento);
         return mapearEntidadeParaResponse(eventoSalvo);
     }
@@ -101,6 +108,9 @@ public class EventoService {
         if (dto.dataHoraInicio() != null) evento.setDataHoraInicio(dto.dataHoraInicio());
         if (dto.dataHoraFim() != null) evento.setDataHoraFim(dto.dataHoraFim());
 
+        if (dto.urlFotoEvento() != null) {
+            evento.setUrlFotoEvento(dto.urlFotoEvento());
+        }
         Evento eventoAtualizado = eventoRepository.save(evento);
         return mapearEntidadeParaResponse(eventoAtualizado);
     }

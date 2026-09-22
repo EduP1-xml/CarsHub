@@ -10,33 +10,37 @@ import carshub.com.br.backend.models.entities.Carro;
 import carshub.com.br.backend.models.entities.Entusiasta;
 import carshub.com.br.backend.repositories.CarroRepository;
 import carshub.com.br.backend.repositories.EntusiastaRepository;
+import carshub.com.br.backend.services.file.FileStorageService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class CarroService {
 
     private final CarroRepository carroRepository;
     private final EntusiastaRepository entusiastaRepository;
+    private final FileStorageService fileStorageService;
 
-    public CarroService(CarroRepository carroRepository, EntusiastaRepository entusiastaRepository) {
-        this.carroRepository = carroRepository;
-        this.entusiastaRepository = entusiastaRepository;
-    }
 
     // POST: Criar Carro
     @Transactional
-    public CarroRespostaDTO registrarCarro(CarroRegistroDTO dto, UUID entusiastaId) {
+    public CarroRespostaDTO registrarCarro(CarroRegistroDTO dto, List<MultipartFile> files, UUID entusiastaId) {
         if (carroRepository.existsByPlaca(dto.placa())) {
             throw new PlacaJaCadastradaException("Esta placa já está registrada em outro veículo no CarsHub.");
         }
+        Entusiasta proprietario = entusiastaRepository.findById(entusiastaId).orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Proprietário não encontrado."));
 
-        Entusiasta proprietario = entusiastaRepository.findById(entusiastaId)
-                .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Proprietário não encontrado."));
+        if (files != null && files.size() > 2) {
+            throw new IllegalArgumentException("É permitido enviar no máximo 2 fotos por carro.");
+        }
 
         proprietario.criaGaragem();
         entusiastaRepository.save(proprietario);
@@ -45,6 +49,16 @@ public class CarroService {
         mapearRegistroDtoParaEntidade(carro, dto);
         carro.setColecionador(proprietario.getColecionador());
 
+        List<String> todasAsUrls = new ArrayList<>();
+        if (files != null && !files.isEmpty()) {
+            for (MultipartFile file : files) {
+                if (file != null && !file.isEmpty()) {
+                    String fileDownloadUri = fileStorageService.salvarArquivo(file);
+                    todasAsUrls.add(fileDownloadUri);
+                }
+            }
+        }
+        carro.setFotosCarro(todasAsUrls);
         Carro carroSalvo = carroRepository.save(carro);
         return mapearEntidadeParaResponse(carroSalvo, proprietario.getNome());
     }
@@ -119,6 +133,9 @@ public class CarroService {
         if (dto.som() != null) carro.setSom(dto.som());
         if (dto.arCondicionado() != null) carro.setArCondicionado(dto.arCondicionado());
         if (dto.tetoSolar() != null) carro.setTetoSolar(dto.tetoSolar());
+        if (dto.fotosCarro() != null) {
+            carro.setFotosCarro(dto.fotosCarro());
+        }
 
         Carro carroAtualizado = carroRepository.save(carro);
         return mapearEntidadeParaResponse(carroAtualizado, carroAtualizado.getColecionador().getEntusiasta().getNome());

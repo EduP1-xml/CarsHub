@@ -87,18 +87,4 @@ public class LoginService {
         return phone;
     }
 
-    public Usuario updateLoc(LatitudeLogintudeDTO dados, Usuario usuarioAutenticado) {
-        Usuario entity = usuarioRepository.findById(usuarioAutenticado.getId()).orElseThrow(() -> new RuntimeException("Perfil não encontrado!"));
-        updateLocs(entity, dados);
-        return usuarioRepository.save(entity);
-    }
-
-    private void updateLocs(Usuario entity, LatitudeLogintudeDTO dados) {
-        if (dados.latitude() != null) {
-            entity.setLatitude(dados.latitude());
-        }
-        if (dados.longitude() != null) {
-            entity.setLongitude(dados.longitude());
-        }
-    }
 }
