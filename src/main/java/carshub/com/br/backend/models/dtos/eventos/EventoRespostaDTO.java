@@ -2,6 +2,7 @@ package carshub.com.br.backend.models.dtos.eventos;
 
 import carshub.com.br.backend.models.enums.eventos.StatusEvento;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 public record EventoRespostaDTO(
@@ -15,5 +16,7 @@ public record EventoRespostaDTO(
         String complemento,
         String bairro,
         StatusEvento status,
-        String nomeOrganizador
+        String nomeOrganizador,
+        LocalDateTime dataHoraInicio,
+        LocalDateTime dataHoraFim
 ) {}

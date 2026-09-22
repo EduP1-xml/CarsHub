@@ -4,5 +4,6 @@ public enum StatusEvento {
     ATIVO,
     ESPERA,
     INATIVO,
-    CANCELADO
+    CANCELADO,
+    CONCLUIDO
 }

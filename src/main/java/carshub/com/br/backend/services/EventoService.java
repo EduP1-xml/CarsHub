@@ -2,6 +2,7 @@ package carshub.com.br.backend.services;
 
 import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
+import carshub.com.br.backend.exceptions.RegraDeNegocioException;
 import carshub.com.br.backend.models.dtos.eventos.EventoPatchDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRegistroDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRespostaDTO;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -51,7 +53,7 @@ public class EventoService {
 
     public List<EventoRespostaDTO> listarMeusEventos(UUID organizadorId) {
         if (!organizadorRepository.existsById(organizadorId)) {
-            throw new RecursoNaoEncontradoException("Sessão inválida, você não está registrado como um Organizador de Eventos.");
+            throw new RecursoNaoEncontradoException("Sessão inválida.");
         }
 
         return eventoRepository.findAllByOrganizadorEvento_Id(organizadorId).stream()
@@ -64,9 +66,10 @@ public class EventoService {
         return mapearEntidadeParaResponse(evento);
     }
 
-    // PUT: Substituição completa
     @Transactional
     public EventoRespostaDTO substituirEvento(UUID eventoId, EventoRegistroDTO dto, UUID organizadorId) {
+        validarConflitoDeDatas(dto.dataHoraInicio(), dto.dataHoraFim());
+
         Evento evento = verificarPropriedadeDoEvento(eventoId, organizadorId);
 
         mapearRegistroDtoParaEntidade(evento, dto);
@@ -75,10 +78,16 @@ public class EventoService {
         return mapearEntidadeParaResponse(eventoAtualizado);
     }
 
-    // PATCH: Edição independente de campos
     @Transactional
     public EventoRespostaDTO atualizarEventoCondicional(UUID eventoId, EventoPatchDTO dto, UUID organizadorId) {
         Evento evento = verificarPropriedadeDoEvento(eventoId, organizadorId);
+
+        LocalDateTime novaDataInicio = dto.dataHoraInicio() != null ? dto.dataHoraInicio() : evento.getDataHoraInicio();
+        LocalDateTime novaDataFim = dto.dataHoraFim() != null ? dto.dataHoraFim() : evento.getDataHoraFim();
+
+        if (dto.dataHoraInicio() != null || dto.dataHoraFim() != null) {
+            validarConflitoDeDatas(novaDataInicio, novaDataFim);
+        }
 
         if (dto.nome() != null && !dto.nome().isBlank()) evento.setNome(dto.nome());
         if (dto.descricao() != null && !dto.descricao().isBlank()) evento.setDescricao(dto.descricao());
@@ -86,14 +95,16 @@ public class EventoService {
         if (dto.limiteParticipantes() != null) evento.setLimiteParticipantes(dto.limiteParticipantes());
         if (dto.rua() != null && !dto.rua().isBlank()) evento.setRua(dto.rua());
         if (dto.numero() != null && !dto.numero().isBlank()) evento.setNumero(dto.numero());
-        if (dto.complemento() != null) evento.setComplemento(dto.complemento()); // Pode ser null ou vazio nativamente
+        if (dto.complemento() != null) evento.setComplemento(dto.complemento());
         if (dto.bairro() != null && !dto.bairro().isBlank()) evento.setBairro(dto.bairro());
+
+        if (dto.dataHoraInicio() != null) evento.setDataHoraInicio(dto.dataHoraInicio());
+        if (dto.dataHoraFim() != null) evento.setDataHoraFim(dto.dataHoraFim());
 
         Evento eventoAtualizado = eventoRepository.save(evento);
         return mapearEntidadeParaResponse(eventoAtualizado);
     }
 
-    // PATCH Específico para o Status (Regra de Negócio separada)
     @Transactional
     public EventoRespostaDTO alterarStatusEvento(UUID eventoId, StatusEvento novoStatus, UUID organizadorId) {
         Evento evento = verificarPropriedadeDoEvento(eventoId, organizadorId);
@@ -110,15 +121,24 @@ public class EventoService {
         eventoRepository.delete(evento);
     }
 
+    // ========================================================
     // MÉTODOS AUXILIARES
+    // ========================================================
 
     private Evento verificarPropriedadeDoEvento(UUID eventoId, UUID organizadorId) {
-        Evento evento = eventoRepository.findById(eventoId).orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado no sistema."));
+        Evento evento = eventoRepository.findById(eventoId)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado no sistema."));
 
         if (!evento.getOrganizadorEvento().getId().equals(organizadorId)) {
             throw new PerfilIncompativelException("Acesso Negado: Você não tem permissão para modificar um evento que pertence a outro organizador.");
         }
         return evento;
+    }
+
+    private void validarConflitoDeDatas(LocalDateTime inicio, LocalDateTime fim) {
+        if (fim.isBefore(inicio) || fim.isEqual(inicio)) {
+            throw new RegraDeNegocioException("A data/hora de término do evento não pode ser igual ou anterior à data de início.");
+        }
     }
 
     private void mapearRegistroDtoParaEntidade(Evento evento, EventoRegistroDTO dto) {
@@ -130,6 +150,8 @@ public class EventoService {
         evento.setNumero(dto.numero());
         evento.setComplemento(dto.complemento());
         evento.setBairro(dto.bairro());
+        evento.setDataHoraInicio(dto.dataHoraInicio());
+        evento.setDataHoraFim(dto.dataHoraFim());
     }
 
     private EventoRespostaDTO mapearEntidadeParaResponse(Evento evento) {
@@ -144,7 +166,9 @@ public class EventoService {
                 evento.getComplemento(),
                 evento.getBairro(),
                 evento.getStatus(),
-                evento.getOrganizadorEvento().getNome()
+                evento.getOrganizadorEvento().getNome(),
+                evento.getDataHoraInicio(),
+                evento.getDataHoraFim()
         );
     }
 }

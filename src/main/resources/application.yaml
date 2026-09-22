@@ -21,7 +21,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/carshub
     username: root
-    password: root
+    password: "@BMW_e36+XT660"
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
