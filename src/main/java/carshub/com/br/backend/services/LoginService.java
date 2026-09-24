@@ -10,6 +10,7 @@ import carshub.com.br.backend.models.entities.*;
 import carshub.com.br.backend.models.enums.tiposUsuarios.TipoUsuario;
 import carshub.com.br.backend.repositories.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.regex.Pattern;
@@ -18,13 +19,12 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class LoginService {
     private final UsuarioRepository usuarioRepository;
+    private final PasswordEncoder encoder;
 
     public String autenticar(LoginDTO loginDTO) {
         Usuario usuario = usuarioRepository.findByLogin(loginDTO.login()).orElseThrow(() -> new RecursoNaoEncontradoException("Usuário não encontrado."));
 
-        // OBS: Mais tarde, usaremos BCrypt para comparar senhas criptografadas.
-        // Por enquanto, faremos uma comparação direta para testar o endpoint.
-        if (!usuario.getSenha().equals(loginDTO.senha())) {
+        if (!encoder.matches(loginDTO.senha(), usuario.getSenha())) {
             throw new SenhaIncorretaException("Senha incorreta.");
         }
 
@@ -34,7 +34,7 @@ public class LoginService {
         }
 
         // 4. Validação Específica para Prestadores de Serviço
-        if (loginDTO.tipoUsuarioSelecionado() == TipoUsuario.PRESTADOR_SERVICO) {
+        if (loginDTO.tipoPrestador().equals(TipoUsuario.PRESTADOR_SERVICO)) {
 
             // O front-end precisa enviar se é Mecânico ou Guincho
             if (loginDTO.tipoUsuarioSelecionado() == null) {

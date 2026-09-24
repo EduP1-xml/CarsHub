@@ -11,7 +11,7 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "PrestadorServico")
+@Table(name = "prestador_servico")
 @Inheritance(strategy = InheritanceType.JOINED)// piora as consultas, mas o banco fica normalizado(mais importante);
 @PrimaryKeyJoinColumn(name = "id_PrestadorServico")
 @Data

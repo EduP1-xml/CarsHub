@@ -8,7 +8,7 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "OrganizadoEvento")
+@Table(name = "organizador_eventos")
 @PrimaryKeyJoinColumn(name = "id_OrganizadorEvento")
 @Data
 @EqualsAndHashCode(callSuper = true)
