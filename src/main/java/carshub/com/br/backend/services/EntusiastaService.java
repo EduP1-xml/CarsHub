@@ -1,11 +1,10 @@
 package carshub.com.br.backend.services;
 
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
-import carshub.com.br.backend.models.dtos.LatitudeLogintudeDTO;
+import carshub.com.br.backend.models.dtos.LatitudeLongitudeDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilEntusiastaPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilEntusiastaPutDTO;
 import carshub.com.br.backend.models.entities.Entusiasta;
-import carshub.com.br.backend.models.entities.Usuario;
 import carshub.com.br.backend.repositories.EntusiastaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,50 +16,48 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class EntusiastaService {
 
-    private final EntusiastaRepository entusiastaRepository;
+    private final EntusiastaRepository repositorioEntusiasta;
 
-    //PUT
     @Transactional
-    public Entusiasta substituirPerfil(UUID id, PerfilEntusiastaPutDTO dto) {
+    public Entusiasta substituirPerfil(UUID id, PerfilEntusiastaPutDTO dados) {
         Entusiasta entusiasta = buscarEntusiastaOuLancarExcecao(id);
 
-        // Como o DTO é validado no Controller, temos certeza que os dados não são nulos.
-        entusiasta.setNome(dto.nome());
-        entusiasta.setSenha(dto.senha());
-        entusiasta.setTelefone(dto.telefone());
+        entusiasta.setNome(dados.nome());
+        entusiasta.setSenha(dados.senha());
+        entusiasta.setTelefone(dados.telefone());
 
-        return entusiastaRepository.save(entusiasta);
+        return repositorioEntusiasta.save(entusiasta);
     }
 
-    //PATCH
     @Transactional
-    public Entusiasta atualizarPerfilCondicional(UUID id, PerfilEntusiastaPatchDTO dto) {
+    public Entusiasta atualizarPerfilCondicional(UUID id, PerfilEntusiastaPatchDTO dados) {
         Entusiasta entusiasta = buscarEntusiastaOuLancarExcecao(id);
 
-        if (dto.nome() != null && !dto.nome().isBlank()) entusiasta.setNome(dto.nome());
-        if (dto.senha() != null && !dto.senha().isBlank()) entusiasta.setSenha(dto.senha());
-        if (dto.telefone() != null && !dto.telefone().isBlank()) entusiasta.setTelefone(dto.telefone());
+        if (dados.nome() != null && !dados.nome().isBlank()) entusiasta.setNome(dados.nome());
+        if (dados.senha() != null && !dados.senha().isBlank()) entusiasta.setSenha(dados.senha());
+        if (dados.telefone() != null && !dados.telefone().isBlank()) entusiasta.setTelefone(dados.telefone());
 
-        return entusiastaRepository.save(entusiasta);
+        return repositorioEntusiasta.save(entusiasta);
+    }
+
+    @Transactional
+    public Entusiasta atualizarLocalizacao(LatitudeLongitudeDTO dados, UUID id) {
+        Entusiasta entidadeEntusiasta = buscarEntusiastaOuLancarExcecao(id);
+        atualizarCoordenadas(entidadeEntusiasta, dados);
+        return repositorioEntusiasta.save(entidadeEntusiasta);
     }
 
     private Entusiasta buscarEntusiastaOuLancarExcecao(UUID id) {
-        return entusiastaRepository.findById(id)
+        return repositorioEntusiasta.findById(id)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Entusiasta não encontrado."));
     }
 
-    public Entusiasta updateLoc(LatitudeLogintudeDTO dados, Entusiasta usuarioAutenticado) {
-        Entusiasta entity = entusiastaRepository.findById(usuarioAutenticado.getId()).orElseThrow(() -> new RuntimeException("Perfil não encontrado!"));
-        updateLocs(entity, dados);
-        return entusiastaRepository.save(entity);
-    }
-
-    private void updateLocs(Entusiasta entity, LatitudeLogintudeDTO dados) {
+    private void atualizarCoordenadas(Entusiasta entidade, LatitudeLongitudeDTO dados) {
         if (dados.latitude() != null) {
-            entity.setLatitude(dados.latitude());
+            entidade.setLatitude(dados.latitude());
         }
         if (dados.longitude() != null) {
-            entity.setLongitude(dados.longitude());
+            entidade.setLongitude(dados.longitude());
         }
     }
 }

@@ -8,12 +8,12 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "organizador_eventos")
+@Table(name = "OrganizadorEvento")
 @PrimaryKeyJoinColumn(name = "id_OrganizadorEvento")
 @Data
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public abstract class OrganizadorEvento extends Usuario {
+public class OrganizadorEvento extends Usuario {
 
     @NotBlank(message = "O CNPJ é obrigatório para realização de atividades comerciais")
     @Pattern(regexp = "\\d{14}", message = "O CNPJ deve conter 14 dígitos numéricos")

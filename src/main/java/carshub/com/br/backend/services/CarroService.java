@@ -32,13 +32,13 @@ public class CarroService {
 
     // POST: Criar Carro
     @Transactional
-    public CarroRespostaDTO registrarCarro(CarroRegistroDTO dto, List<MultipartFile> files, UUID entusiastaId) {
+    public CarroRespostaDTO registrarCarro(CarroRegistroDTO dto, List<MultipartFile> arquivos, UUID entusiastaId) {
         if (carroRepository.existsByPlaca(dto.placa())) {
             throw new PlacaJaCadastradaException("Esta placa já está registrada em outro veículo no CarsHub.");
         }
         Entusiasta proprietario = entusiastaRepository.findById(entusiastaId).orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Proprietário não encontrado."));
 
-        if (files != null && files.size() > 2) {
+        if (arquivos != null && arquivos.size() > 2) {
             throw new IllegalArgumentException("É permitido enviar no máximo 2 fotos por carro.");
         }
 
@@ -50,8 +50,8 @@ public class CarroService {
         carro.setColecionador(proprietario.getColecionador());
 
         List<String> todasAsUrls = new ArrayList<>();
-        if (files != null && !files.isEmpty()) {
-            for (MultipartFile file : files) {
+        if (arquivos != null && !arquivos.isEmpty()) {
+            for (MultipartFile file : arquivos) {
                 if (file != null && !file.isEmpty()) {
                     String fileDownloadUri = fileStorageService.salvarArquivo(file);
                     todasAsUrls.add(fileDownloadUri);

@@ -111,7 +111,7 @@ public class EmailService {
                         line-height: 1.7;
                         margin: 0 0 32px;
                     }
-                    .code-container {
+                    .codigo-container {
                         background: linear-gradient(145deg, #161616, #222222);
                         border: 1px solid #d4af37; 
                         border-radius: 6px;
@@ -119,7 +119,7 @@ public class EmailService {
                         margin: 0 0 32px;
                         box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
                     }
-                    .code {
+                    .codigo {
                         font-family: 'Courier New', Courier, monospace;
                         font-size: 34px;
                         font-weight: 700;
@@ -157,7 +157,7 @@ public class EmailService {
                             border-left: none;
                             border-right: none;
                         }
-                        .code {
+                        .codigo {
                             font-size: 28px;
                             letter-spacing: 6px;
                         }
@@ -186,8 +186,8 @@ public class EmailService {
                                         Os motores estão aquecendo! Para concluir sua matrícula e ter acesso ao acervo exclusivo de clássicos, por favor, dê a partida confirmando seu e-mail com o código abaixo.
                                     </p>
                                     
-                                    <div class="code-container">
-                                        <p class="code">{{CODE}}</p>
+                                    <div class="codigo-container">
+                                        <p class="codigo">{{CODE}}</p>
                                     </div>
                                     
                                     <p class="text" style="margin-bottom: 0;">
@@ -318,7 +318,7 @@ public class EmailService {
                         line-height: 1.7;
                         margin: 0 0 32px;
                     }
-                    .code-container {
+                    .codigo-container {
                         background: linear-gradient(145deg, #161616, #222222);
                         border: 1px solid #d4af37; 
                         border-radius: 6px;
@@ -326,7 +326,7 @@ public class EmailService {
                         margin: 0 0 32px;
                         box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
                     }
-                    .code {
+                    .codigo {
                         font-family: 'Courier New', Courier, monospace;
                         font-size: 34px;
                         font-weight: 700;
@@ -363,7 +363,7 @@ public class EmailService {
                             border-left: none;
                             border-right: none;
                         }
-                        .code {
+                        .codigo {
                             font-size: 28px;
                             letter-spacing: 6px;
                         }
@@ -392,8 +392,8 @@ public class EmailService {
                                         Ouvimos os motores ligarem. Para garantir que é realmente você atrás do volante, utilize a chave de verificação abaixo para acessar sua conta.
                                     </p>
                                     
-                                    <div class="code-container">
-                                        <p class="code">{{CODE}}</p>
+                                    <div class="codigo-container">
+                                        <p class="codigo">{{CODE}}</p>
                                     </div>
                                     
                                     <p class="text" style="margin-bottom: 0;">
@@ -524,7 +524,7 @@ public class EmailService {
                         line-height: 1.7;
                         margin: 0 0 32px;
                     }
-                    .code-container {
+                    .codigo-container {
                         background: linear-gradient(145deg, #161616, #222222);
                         border: 1px solid #d4af37; 
                         border-radius: 6px;
@@ -532,7 +532,7 @@ public class EmailService {
                         margin: 0 0 32px;
                         box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
                     }
-                    .code {
+                    .codigo {
                         font-family: 'Courier New', Courier, monospace;
                         font-size: 34px;
                         font-weight: 700;
@@ -569,7 +569,7 @@ public class EmailService {
                             border-left: none;
                             border-right: none;
                         }
-                        .code {
+                        .codigo {
                             font-size: 28px;
                             letter-spacing: 6px;
                         }
@@ -598,8 +598,8 @@ public class EmailService {
                                         Você solicitou um reforço extra de segurança na sua conta (2FA). Utilize o código abaixo para finalizar essa manutenção e manter sua garagem protegida.
                                     </p>
                                     
-                                    <div class="code-container">
-                                        <p class="code">{{CODE}}</p>
+                                    <div class="codigo-container">
+                                        <p class="codigo">{{CODE}}</p>
                                     </div>
                                     
                                     <p class="text" style="margin-bottom: 0;">

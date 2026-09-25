@@ -26,7 +26,7 @@ public class Evento {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @JdbcTypeCode(Types.BINARY)
-    @Column(name = "id_Evento", updatable = false, nullable = false)
+    @Column(name = "idEvento_Evento", updatable = false, nullable = false)
     private UUID idEvento;
 
     @NotBlank(message = "O nome do evento é um campo obrigatório")
@@ -46,10 +46,9 @@ public class Evento {
 
     @NotNull(message = "O limite de participantes é obrigatório")
     @Min(value = 1, message = "O evento deve ter espaço para pelo menos 1 participante")
-    @Column(name = "limite_Participantes", nullable = false)
+    @Column(name = "limiteParticipantes_Evento", nullable = false)
     private Integer limiteParticipantes;
 
-    // --- ENDEREÇO ---
     @NotBlank(message = "A rua é obrigatória")
     @Size(max = 100, message = "A rua não pode exceder 100 caracteres")
     @Column(name = "rua_Evento", length = 100, nullable = false)
@@ -61,14 +60,13 @@ public class Evento {
     private String numero;
 
     @Size(max = 50, message = "O complemento não pode exceder 50 caracteres")
-    @Column(name = "complemento_Evento", length = 50) // Campo puramente opcional
+    @Column(name = "complemento_Evento", length = 50)
     private String complemento;
 
     @NotBlank(message = "O bairro é obrigatório")
     @Size(max = 50, message = "O bairro não pode exceder 50 caracteres")
     @Column(name = "bairro_Evento", length = 50, nullable = false)
     private String bairro;
-    // ----------------
 
     @NotNull(message = "A data e hora de início são obrigatórias")
     @Column(name = "dataHoraInicio_Evento", nullable = false)
@@ -85,11 +83,17 @@ public class Evento {
 
     @NotNull(message = "É necessário ter um organizador vinculado para criar um evento")
     @ManyToOne(optional = false)
-    @JoinColumn(name = "id_OrganizadorEvento_Evento", referencedColumnName = "id_OrganizadorEvento", nullable = false)
+    @JoinColumn(name = "organizadorEvento_Evento", referencedColumnName = "id_Usuario", nullable = false)
     private OrganizadorEvento organizadorEvento;
 
+    @ElementCollection
+    @CollectionTable(name = "UrlFoto_Evento", joinColumns = @JoinColumn(name = "idEvento_Evento"))
+    @Column(name = "urlFotoEvento_Evento")
     private List<String> urlFotoEvento;
 
+    @Column(name = "latitude_Evento")
     private Double latitude;
+
+    @Column(name = "longitude_Evento")
     private Double longitude;
 }

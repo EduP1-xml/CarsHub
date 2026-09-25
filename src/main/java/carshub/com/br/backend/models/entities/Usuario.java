@@ -70,14 +70,18 @@ public class Usuario implements UserDetails {
     @Column(name = "data_hora_usuario", nullable = false, updatable = false, columnDefinition = "DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6)")
     private LocalDateTime dataHora;
 
+    @Column(name = "codigoVerificacao_Usuario")
     @JsonIgnore
-    private String verificationCode;
+    private String codigoVerificacao;
 
+    @Column(name = "expiracaoCodigoVerificacao")
     @JsonIgnore
-    private LocalDateTime verificationCodeExpiration;
+    private LocalDateTime expiracaoCodigoVerificacao;
 
-    private Boolean enabled;
+    @Column(name = "ativo")
+    private Boolean ativo;
 
+    @Column(name = "urlFotoPerfil")
     private String urlFotoPerfil;
 
 

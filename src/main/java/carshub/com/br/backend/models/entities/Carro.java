@@ -7,7 +7,6 @@ import jakarta.validation.constraints.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -95,7 +94,7 @@ public class Carro {
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "suspencao_Carro", nullable = false)
-    private TipoSuspencao suspencao;
+    private TipoSuspensao suspencao;
 
     @NotNull
     @Enumerated(EnumType.STRING)

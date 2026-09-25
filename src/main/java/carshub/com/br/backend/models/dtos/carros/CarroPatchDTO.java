@@ -18,7 +18,7 @@ public record CarroPatchDTO(
         TipoCombustivel combustivel,
         TipoCambio cambio,
         TipoTracao tracao,
-        TipoSuspencao suspencao,
+        TipoSuspensao suspencao,
         TipoFreio freio,
         TipoDirecao direcao,
         TipoRoda roda,

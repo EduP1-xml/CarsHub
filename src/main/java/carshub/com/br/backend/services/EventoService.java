@@ -4,6 +4,7 @@ import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.exceptions.RegraDeNegocioException;
 import carshub.com.br.backend.models.dtos.eventos.EventoPatchDTO;
+import carshub.com.br.backend.models.dtos.eventos.EventoPutDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRegistroDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRespostaDTO;
 import carshub.com.br.backend.models.entities.Evento;
@@ -27,119 +28,131 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EventoService {
 
-    private final EventoRepository eventoRepository;
-    private final OrganizadorEventoRepository organizadorRepository;
-    private final FileStorageService fileStorageService;
-
+    private final EventoRepository repositorioEvento;
+    private final OrganizadorEventoRepository repositorioOrganizador;
+    private final FileStorageService servicoArmazenamentoArquivo;
 
     @Transactional
-    public EventoRespostaDTO criarEvento(EventoRegistroDTO dto, List<MultipartFile>  files, UUID organizadorId) {
-        OrganizadorEvento organizador = organizadorRepository.findById(organizadorId).orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Organizador não encontrado."));
+    public EventoRespostaDTO criarEvento(EventoRegistroDTO dados, List<MultipartFile> arquivos, UUID idOrganizador) {
+        validarConflitoDeDatas(dados.dataHoraInicio(), dados.dataHoraFim());
 
-        if (files != null && files.size() > 3) {
+        OrganizadorEvento organizador = repositorioOrganizador.findById(idOrganizador)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Organizador não encontrado."));
+
+        if (arquivos != null && arquivos.size() > 3) {
             throw new IllegalArgumentException("É permitido enviar no máximo 3 fotos por evento.");
         }
 
         Evento evento = new Evento();
-        mapearRegistroDtoParaEntidade(evento, dto);
+        mapearRegistroDtoParaEntidade(evento, dados);
         evento.setOrganizadorEvento(organizador);
 
-        List<String> todasAsUrls = new ArrayList<>();
-        if (files != null && !files.isEmpty()) {
-            for (MultipartFile file : files) {
-                if (file != null && !file.isEmpty()) {
-                    String fileDownloadUri = fileStorageService.salvarArquivo(file);
-                    todasAsUrls.add(fileDownloadUri);
+        List<String> urlsFotos = new ArrayList<>();
+        if (arquivos != null && !arquivos.isEmpty()) {
+            for (MultipartFile arquivo : arquivos) {
+                if (arquivo != null && !arquivo.isEmpty()) {
+                    String uriDownloadArquivo = servicoArmazenamentoArquivo.salvarArquivo(arquivo);
+                    urlsFotos.add(uriDownloadArquivo);
                 }
             }
         }
-        evento.setUrlFotoEvento(todasAsUrls);
-        Evento eventoSalvo = eventoRepository.save(evento);
+        evento.setUrlFotoEvento(urlsFotos);
+
+        Evento eventoSalvo = repositorioEvento.save(evento);
         return mapearEntidadeParaResponse(eventoSalvo);
     }
 
-    public List<EventoRespostaDTO> listarMeusEventos(UUID organizadorId) {
-        if (!organizadorRepository.existsById(organizadorId)) {
+    public List<EventoRespostaDTO> listarMeusEventos(UUID idOrganizador) {
+        if (!repositorioOrganizador.existsById(idOrganizador)) {
             throw new RecursoNaoEncontradoException("Sessão inválida.");
         }
 
-        return eventoRepository.findAllByOrganizadorEvento_Id(organizadorId).stream()
+        return repositorioEvento.findAllByOrganizadorEvento_Id(idOrganizador).stream()
                 .map(this::mapearEntidadeParaResponse)
                 .collect(Collectors.toList());
     }
 
-    public EventoRespostaDTO buscarMeuEventoPorId(UUID eventoId, UUID organizadorId) {
-        Evento evento = verificarPropriedadeDoEvento(eventoId, organizadorId);
+    public EventoRespostaDTO buscarMeuEventoPorId(UUID idEvento, UUID idOrganizador) {
+        Evento evento = verificarPropriedadeDoEvento(idEvento, idOrganizador);
         return mapearEntidadeParaResponse(evento);
     }
 
     @Transactional
-    public EventoRespostaDTO substituirEvento(UUID eventoId, EventoRegistroDTO dto, UUID organizadorId) {
-        validarConflitoDeDatas(dto.dataHoraInicio(), dto.dataHoraFim());
+    public EventoRespostaDTO substituirEvento(UUID idEvento, EventoPutDTO dados, UUID idOrganizador) {
+        validarConflitoDeDatas(dados.dataHoraInicio(), dados.dataHoraFim());
 
-        Evento evento = verificarPropriedadeDoEvento(eventoId, organizadorId);
+        Evento evento = verificarPropriedadeDoEvento(idEvento, idOrganizador);
 
-        mapearRegistroDtoParaEntidade(evento, dto);
-        Evento eventoAtualizado = eventoRepository.save(evento);
+        // Bloqueia a alteração da data de início se o evento já começou e a pessoa tentou mudar essa data
+        if (evento.getDataHoraInicio().isBefore(LocalDateTime.now()) && !evento.getDataHoraInicio().equals(dados.dataHoraInicio())) {
+            throw new RegraDeNegocioException("Não é possível alterar a data de início de um evento que já começou.");
+        }
+
+        mapearPutDtoParaEntidade(evento, dados);
+        Evento eventoAtualizado = repositorioEvento.save(evento);
 
         return mapearEntidadeParaResponse(eventoAtualizado);
     }
 
     @Transactional
-    public EventoRespostaDTO atualizarEventoCondicional(UUID eventoId, EventoPatchDTO dto, UUID organizadorId) {
-        Evento evento = verificarPropriedadeDoEvento(eventoId, organizadorId);
+    public EventoRespostaDTO atualizarEventoCondicional(UUID idEvento, EventoPatchDTO dados, UUID idOrganizador) {
+        Evento evento = verificarPropriedadeDoEvento(idEvento, idOrganizador);
 
-        LocalDateTime novaDataInicio = dto.dataHoraInicio() != null ? dto.dataHoraInicio() : evento.getDataHoraInicio();
-        LocalDateTime novaDataFim = dto.dataHoraFim() != null ? dto.dataHoraFim() : evento.getDataHoraFim();
+        LocalDateTime novaDataInicio = dados.dataHoraInicio() != null ? dados.dataHoraInicio() : evento.getDataHoraInicio();
+        LocalDateTime novaDataFim = dados.dataHoraFim() != null ? dados.dataHoraFim() : evento.getDataHoraFim();
 
-        if (dto.dataHoraInicio() != null || dto.dataHoraFim() != null) {
+        if (dados.dataHoraInicio() != null || dados.dataHoraFim() != null) {
             validarConflitoDeDatas(novaDataInicio, novaDataFim);
         }
 
-        if (dto.nome() != null && !dto.nome().isBlank()) evento.setNome(dto.nome());
-        if (dto.descricao() != null && !dto.descricao().isBlank()) evento.setDescricao(dto.descricao());
-        if (dto.preco() != null) evento.setPreco(dto.preco());
-        if (dto.limiteParticipantes() != null) evento.setLimiteParticipantes(dto.limiteParticipantes());
-        if (dto.rua() != null && !dto.rua().isBlank()) evento.setRua(dto.rua());
-        if (dto.numero() != null && !dto.numero().isBlank()) evento.setNumero(dto.numero());
-        if (dto.complemento() != null) evento.setComplemento(dto.complemento());
-        if (dto.bairro() != null && !dto.bairro().isBlank()) evento.setBairro(dto.bairro());
-
-        if (dto.dataHoraInicio() != null) evento.setDataHoraInicio(dto.dataHoraInicio());
-        if (dto.dataHoraFim() != null) evento.setDataHoraFim(dto.dataHoraFim());
-
-        if (dto.urlFotoEvento() != null) {
-            evento.setUrlFotoEvento(dto.urlFotoEvento());
+        // Bloqueia a alteração parcial da data de início se o evento já começou
+        if (dados.dataHoraInicio() != null && !evento.getDataHoraInicio().equals(dados.dataHoraInicio())) {
+            if (evento.getDataHoraInicio().isBefore(LocalDateTime.now())) {
+                throw new RegraDeNegocioException("Não é possível alterar a data de início de um evento que já começou.");
+            }
+            evento.setDataHoraInicio(dados.dataHoraInicio());
         }
-        Evento eventoAtualizado = eventoRepository.save(evento);
+
+        if (dados.nome() != null && !dados.nome().isBlank()) evento.setNome(dados.nome());
+        if (dados.descricao() != null && !dados.descricao().isBlank()) evento.setDescricao(dados.descricao());
+        if (dados.preco() != null) evento.setPreco(dados.preco());
+        if (dados.limiteParticipantes() != null) evento.setLimiteParticipantes(dados.limiteParticipantes());
+        if (dados.rua() != null && !dados.rua().isBlank()) evento.setRua(dados.rua());
+        if (dados.numero() != null && !dados.numero().isBlank()) evento.setNumero(dados.numero());
+        if (dados.complemento() != null) evento.setComplemento(dados.complemento());
+        if (dados.bairro() != null && !dados.bairro().isBlank()) evento.setBairro(dados.bairro());
+        if (dados.dataHoraFim() != null) evento.setDataHoraFim(dados.dataHoraFim());
+        if (dados.urlFotoEvento() != null) evento.setUrlFotoEvento(dados.urlFotoEvento());
+
+        Evento eventoAtualizado = repositorioEvento.save(evento);
         return mapearEntidadeParaResponse(eventoAtualizado);
     }
 
     @Transactional
-    public EventoRespostaDTO alterarStatusEvento(UUID eventoId, StatusEvento novoStatus, UUID organizadorId) {
-        Evento evento = verificarPropriedadeDoEvento(eventoId, organizadorId);
+    public EventoRespostaDTO alterarStatusEvento(UUID idEvento, StatusEvento novoStatus, UUID idOrganizador) {
+        Evento evento = verificarPropriedadeDoEvento(idEvento, idOrganizador);
 
         evento.setStatus(novoStatus);
-        Evento eventoAtualizado = eventoRepository.save(evento);
+        Evento eventoAtualizado = repositorioEvento.save(evento);
 
         return mapearEntidadeParaResponse(eventoAtualizado);
     }
 
     @Transactional
-    public void excluirEvento(UUID eventoId, UUID organizadorId) {
-        Evento evento = verificarPropriedadeDoEvento(eventoId, organizadorId);
-        eventoRepository.delete(evento);
+    public void excluirEvento(UUID idEvento, UUID idOrganizador) {
+        Evento evento = verificarPropriedadeDoEvento(idEvento, idOrganizador);
+        repositorioEvento.delete(evento);
     }
 
     // ========================================================
     // MÉTODOS AUXILIARES
     // ========================================================
 
-    private Evento verificarPropriedadeDoEvento(UUID eventoId, UUID organizadorId) {
-        Evento evento = eventoRepository.findById(eventoId)
+    private Evento verificarPropriedadeDoEvento(UUID idEvento, UUID idOrganizador) {
+        Evento evento = repositorioEvento.findById(idEvento)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado no sistema."));
 
-        if (!evento.getOrganizadorEvento().getId().equals(organizadorId)) {
+        if (!evento.getOrganizadorEvento().getId().equals(idOrganizador)) {
             throw new PerfilIncompativelException("Acesso Negado: Você não tem permissão para modificar um evento que pertence a outro organizador.");
         }
         return evento;
@@ -151,17 +164,33 @@ public class EventoService {
         }
     }
 
-    private void mapearRegistroDtoParaEntidade(Evento evento, EventoRegistroDTO dto) {
-        evento.setNome(dto.nome());
-        evento.setDescricao(dto.descricao());
-        evento.setPreco(dto.preco());
-        evento.setLimiteParticipantes(dto.limiteParticipantes());
-        evento.setRua(dto.rua());
-        evento.setNumero(dto.numero());
-        evento.setComplemento(dto.complemento());
-        evento.setBairro(dto.bairro());
-        evento.setDataHoraInicio(dto.dataHoraInicio());
-        evento.setDataHoraFim(dto.dataHoraFim());
+    private void mapearRegistroDtoParaEntidade(Evento evento, EventoRegistroDTO dados) {
+        evento.setNome(dados.nome());
+        evento.setDescricao(dados.descricao());
+        evento.setPreco(dados.preco());
+        evento.setLimiteParticipantes(dados.limiteParticipantes());
+        evento.setRua(dados.rua());
+        evento.setNumero(dados.numero());
+        evento.setComplemento(dados.complemento());
+        evento.setBairro(dados.bairro());
+        evento.setDataHoraInicio(dados.dataHoraInicio());
+        evento.setDataHoraFim(dados.dataHoraFim());
+    }
+
+    private void mapearPutDtoParaEntidade(Evento evento, EventoPutDTO dados) {
+        evento.setNome(dados.nome());
+        evento.setDescricao(dados.descricao());
+        evento.setPreco(dados.preco());
+        evento.setLimiteParticipantes(dados.limiteParticipantes());
+        evento.setRua(dados.rua());
+        evento.setNumero(dados.numero());
+        evento.setComplemento(dados.complemento());
+        evento.setBairro(dados.bairro());
+        evento.setDataHoraInicio(dados.dataHoraInicio());
+        evento.setDataHoraFim(dados.dataHoraFim());
+        if (dados.urlFotoEvento() != null) {
+            evento.setUrlFotoEvento(dados.urlFotoEvento());
+        }
     }
 
     private EventoRespostaDTO mapearEntidadeParaResponse(Evento evento) {

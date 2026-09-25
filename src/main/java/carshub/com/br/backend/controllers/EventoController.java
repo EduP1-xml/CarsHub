@@ -1,18 +1,15 @@
 package carshub.com.br.backend.controllers;
 
 import carshub.com.br.backend.models.dtos.eventos.EventoPatchDTO;
+import carshub.com.br.backend.models.dtos.eventos.EventoPutDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRegistroDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRespostaDTO;
-import carshub.com.br.backend.models.entities.Entusiasta;
-import carshub.com.br.backend.models.entities.OrganizadorEvento;
-import carshub.com.br.backend.models.entities.Usuario;
 import carshub.com.br.backend.models.enums.eventos.StatusEvento;
 import carshub.com.br.backend.services.EventoService;
-import jakarta.mail.Multipart;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -21,67 +18,68 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/carshub/organizadores/eventos")
+@RequiredArgsConstructor
 public class EventoController {
 
-    private final EventoService eventoService;
-
-    public EventoController(EventoService eventoService) {
-        this.eventoService = eventoService;
-    }
+    private final EventoService servicoEvento;
 
     @PostMapping(consumes = {"multipart/form-data"})
-    public ResponseEntity<EventoRespostaDTO> criarEvento(@RequestPart("data") @Valid  EventoRegistroDTO data, @RequestPart(value = "file", required = false) List<MultipartFile> files, @AuthenticationPrincipal Entusiasta usuario) {
-        EventoRespostaDTO eventoSalvo = eventoService.criarEvento(data, files,  usuario.getId());
+    public ResponseEntity<EventoRespostaDTO> criarEvento(
+            @RequestPart("dados") @Valid EventoRegistroDTO dados,
+            @RequestPart(value = "arquivos", required = false) List<MultipartFile> arquivos,
+            @RequestHeader("user-id") UUID idOrganizador) {
+
+        EventoRespostaDTO eventoSalvo = servicoEvento.criarEvento(dados, arquivos, idOrganizador);
         return ResponseEntity.status(HttpStatus.CREATED).body(eventoSalvo);
     }
 
     @GetMapping
     public ResponseEntity<List<EventoRespostaDTO>> listarMeusEventos(
-            @RequestHeader("user-id") UUID organizadorId) {
-        List<EventoRespostaDTO> eventos = eventoService.listarMeusEventos(organizadorId);
+            @RequestHeader("user-id") UUID idOrganizador) {
+        List<EventoRespostaDTO> eventos = servicoEvento.listarMeusEventos(idOrganizador);
         return ResponseEntity.ok(eventos);
     }
 
     @GetMapping("/{idEvento}")
     public ResponseEntity<EventoRespostaDTO> buscarEvento(
             @PathVariable UUID idEvento,
-            @RequestHeader("user-id") UUID organizadorId) {
-        EventoRespostaDTO evento = eventoService.buscarMeuEventoPorId(idEvento, organizadorId);
+            @RequestHeader("user-id") UUID idOrganizador) {
+        EventoRespostaDTO evento = servicoEvento.buscarMeuEventoPorId(idEvento, idOrganizador);
         return ResponseEntity.ok(evento);
     }
 
     @PutMapping("/{idEvento}")
     public ResponseEntity<EventoRespostaDTO> substituirEvento(
             @PathVariable UUID idEvento,
-            @RequestHeader("user-id") UUID organizadorId,
-            @Valid @RequestBody EventoRegistroDTO dto) {
-        EventoRespostaDTO eventoAtualizado = eventoService.substituirEvento(idEvento, dto, organizadorId);
+            @RequestHeader("user-id") UUID idOrganizador,
+            @Valid @RequestBody EventoPutDTO dados) {
+        EventoRespostaDTO eventoAtualizado = servicoEvento.substituirEvento(idEvento, dados, idOrganizador);
         return ResponseEntity.ok(eventoAtualizado);
     }
 
     @PatchMapping("/{idEvento}")
     public ResponseEntity<EventoRespostaDTO> atualizarEventoParcial(
             @PathVariable UUID idEvento,
-            @RequestHeader("user-id") UUID organizadorId,
-            @RequestBody EventoPatchDTO dto) {
-        EventoRespostaDTO eventoAtualizado = eventoService.atualizarEventoCondicional(idEvento, dto, organizadorId);
+            @RequestHeader("user-id") UUID idOrganizador,
+            @RequestBody EventoPatchDTO dados) {
+        EventoRespostaDTO eventoAtualizado = servicoEvento.atualizarEventoCondicional(idEvento, dados, idOrganizador);
         return ResponseEntity.ok(eventoAtualizado);
     }
 
     @PatchMapping("/{idEvento}/status")
     public ResponseEntity<EventoRespostaDTO> alterarStatus(
             @PathVariable UUID idEvento,
-            @RequestHeader("user-id") UUID organizadorId,
+            @RequestHeader("user-id") UUID idOrganizador,
             @RequestParam StatusEvento novoStatus) {
-        EventoRespostaDTO eventoAtualizado = eventoService.alterarStatusEvento(idEvento, novoStatus, organizadorId);
+        EventoRespostaDTO eventoAtualizado = servicoEvento.alterarStatusEvento(idEvento, novoStatus, idOrganizador);
         return ResponseEntity.ok(eventoAtualizado);
     }
 
     @DeleteMapping("/{idEvento}")
     public ResponseEntity<Void> excluirEvento(
             @PathVariable UUID idEvento,
-            @RequestHeader("user-id") UUID organizadorId) {
-        eventoService.excluirEvento(idEvento, organizadorId);
+            @RequestHeader("user-id") UUID idOrganizador) {
+        servicoEvento.excluirEvento(idEvento, idOrganizador);
         return ResponseEntity.noContent().build();
     }
 }

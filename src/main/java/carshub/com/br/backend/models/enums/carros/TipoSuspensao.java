@@ -1,6 +1,6 @@
 package carshub.com.br.backend.models.enums.carros;
 
-public enum TipoSuspencao {
+public enum TipoSuspensao {
     FIXA,
     ROSCA,
     AR

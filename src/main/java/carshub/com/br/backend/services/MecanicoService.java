@@ -6,7 +6,7 @@ import carshub.com.br.backend.models.dtos.perfis.patches.PerfilMecanicoPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilMecanicoPutDTO;
 import carshub.com.br.backend.models.entities.Mecanico;
 import carshub.com.br.backend.models.entities.PrestadorServico;
-import carshub.com.br.backend.repositories.PrestadorServicoRespository;
+import carshub.com.br.backend.repositories.PrestadorServicoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,9 +15,9 @@ import java.util.UUID;
 @Service
 public class MecanicoService {
 
-    private final PrestadorServicoRespository prestadorRepository;
+    private final PrestadorServicoRepository prestadorRepository;
 
-    public MecanicoService(PrestadorServicoRespository prestadorRepository) {
+    public MecanicoService(PrestadorServicoRepository prestadorRepository) {
         this.prestadorRepository = prestadorRepository;
     }
 

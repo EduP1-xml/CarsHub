@@ -19,7 +19,7 @@ public record CarroRegistroDTO(
         @NotNull TipoCombustivel combustivel,
         @NotNull TipoCambio cambio,
         @NotNull TipoTracao tracao,
-        @NotNull TipoSuspencao suspencao,
+        @NotNull TipoSuspensao suspencao,
         @NotNull TipoFreio freio,
         @NotNull TipoDirecao direcao,
         @NotNull TipoRoda roda,

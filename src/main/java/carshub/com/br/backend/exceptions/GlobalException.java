@@ -14,6 +14,8 @@ import java.util.Map;
 @RestControllerAdvice
 @Slf4j
 public class GlobalException {
+    //Penso em alterar essa classe, para que os erros fiquem o mais genéricos possíveis, tendo apensas 1 por tipo de erro,
+    // sendo diferenciados apenas pelas mensagens que serão retornadas;
 
     // 1. Captura os erros disparados pelo @Valid nos Controllers (Status 400 - Bad Request)
     @ExceptionHandler(MethodArgumentNotValidException.class)

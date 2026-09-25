@@ -11,7 +11,7 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "prestador_servico")
+@Table(name = "PrestadorServico")
 @Inheritance(strategy = InheritanceType.JOINED)// piora as consultas, mas o banco fica normalizado(mais importante);
 @PrimaryKeyJoinColumn(name = "id_PrestadorServico")
 @Data
@@ -28,7 +28,4 @@ public abstract class PrestadorServico extends Usuario{
     @Enumerated(EnumType.STRING)// só definindo a forma de armazenamento desse Enum
     @Column(name = "tipoPrestadorServico_PrestadorServico", nullable = false)
     private TipoPrestadorServico tipoPrestadorServico;
-
-    private Double latitude;
-    private Double longitude;
 }
