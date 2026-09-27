@@ -12,7 +12,7 @@ import lombok.ToString;
 
 @Entity
 @Table(name = "Entusiasta")
-@PrimaryKeyJoinColumn(name = "idEntusiasta")
+@PrimaryKeyJoinColumn(name = "id_Entusiasta")
 @Data
 @EqualsAndHashCode(callSuper = true, exclude = "colecionador") // Evita loop de memória
 @ToString(exclude = "colecionador")
@@ -21,11 +21,11 @@ public class Entusiasta extends Usuario {
 
     @NotBlank(message = "O CPF é obrigatório")
     @Pattern(regexp = "\\d{11}", message = "O CPF deve conter exatamente 11 dígitos numéricos")
-    @Column(name = "cpf_entusiasta", length = 11, unique = true)
+    @Column(name = "cpf_Entusiasta", length = 11, unique = true)
     private String cpf;
 
     @NotNull(message = "É necessário informar se possui carros")
-    @Column(name = "possui_carros", nullable = false)
+    @Column(name = "possuiCarros_Entusiasta", nullable = false)
     private Boolean possuiCarros = false;
 
     // Relacionamento de Composição

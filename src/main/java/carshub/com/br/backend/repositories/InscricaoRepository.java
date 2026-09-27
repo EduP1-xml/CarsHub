@@ -11,10 +11,10 @@ import java.util.UUID;
 
 public interface InscricaoRepository extends JpaRepository<Inscricao, UUID> {
     // Conta quantas inscrições confirmadas o evento possui (para barrar lotação)
-    int countByEvento_IdEventoAndStatus(UUID idEvento, StatusInscricao status);
+    int countByEvento_IdAndStatus(UUID id, StatusInscricao status);
     
     // Verifica se o usuário já tem uma inscrição ativa no evento
-    boolean existsByEntusiasta_IdAndEvento_IdEventoAndStatus(UUID idEntusiasta, UUID idEvento, StatusInscricao status);
+    boolean existsByEntusiasta_IdAndEvento_IdAndStatus(UUID idEntusiasta, UUID id, StatusInscricao status);
     
     // Lista todas as inscrições de um usuário específico
     List<Inscricao> findAllByEntusiasta_Id(UUID idEntusiasta);
@@ -24,5 +24,5 @@ public interface InscricaoRepository extends JpaRepository<Inscricao, UUID> {
     Integer countTotalParticipantesByOrganizador(@Param("idOrganizador") UUID idOrganizador);
 
     // Ajuda a montar o histórico: Conta os participantes de um evento específico que já foi concluído
-    int countByEvento_IdEvento(UUID idEvento);
+    int countByEvento_Id(UUID id);
 }

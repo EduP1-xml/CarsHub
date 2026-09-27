@@ -46,12 +46,12 @@ public class InscricaoService {
         }
 
         // 2. Valida se já não está inscrito
-        if (inscricaoRepository.existsByEntusiasta_IdAndEvento_IdEventoAndStatus(idEntusiasta, dto.idEvento(), StatusInscricao.CONFIRMADA)) {
+        if (inscricaoRepository.existsByEntusiasta_IdAndEvento_IdAndStatus(idEntusiasta, dto.idEvento(), StatusInscricao.CONFIRMADA)) {
             throw new RegraDeNegocioException("Você já possui uma inscrição ativa para este evento.");
         }
 
         // 3. Prevenção de Overbooking
-        int vagasOcupadas = inscricaoRepository.countByEvento_IdEventoAndStatus(dto.idEvento(), StatusInscricao.CONFIRMADA);
+        int vagasOcupadas = inscricaoRepository.countByEvento_IdAndStatus(dto.idEvento(), StatusInscricao.CONFIRMADA);
         if (vagasOcupadas >= evento.getLimiteParticipantes()) {
             throw new RegraDeNegocioException("Infelizmente o limite de participantes deste evento já foi atingido (Lotação Esgotada).");
         }
@@ -104,7 +104,7 @@ public class InscricaoService {
                 : "Sem veículo vinculado";
 
         return new InscricaoResponseDTO(
-                inscricao.getIdInscricao(),
+                inscricao.getId(),
                 inscricao.getEvento().getNome(),
                 inscricao.getEntusiasta().getNome(),
                 infoCarro,

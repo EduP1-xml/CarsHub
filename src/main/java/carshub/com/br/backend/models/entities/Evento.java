@@ -26,8 +26,8 @@ public class Evento {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @JdbcTypeCode(Types.BINARY)
-    @Column(name = "idEvento_Evento", updatable = false, nullable = false)
-    private UUID idEvento;
+    @Column(name = "id_Evento", updatable = false, nullable = false)
+    private UUID id;
 
     @NotBlank(message = "O nome do evento é um campo obrigatório")
     @Size(max = 50, message = "O nome do evento não pode exceder 50 caracteres")

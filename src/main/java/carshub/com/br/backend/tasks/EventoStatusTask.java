@@ -33,7 +33,7 @@ public class EventoStatusTask {
         if (!eventosExpirados.isEmpty()) {
             for (Evento evento : eventosExpirados) {
                 evento.setStatus(StatusEvento.CONCLUIDO);
-                log.info("Evento '{}' (ID: {}) concluído automaticamente pelo sistema.", evento.getNome(), evento.getIdEvento());
+                log.info("Evento '{}' (ID: {}) concluído automaticamente pelo sistema.", evento.getNome(), evento.getId());
             }
             eventoRepository.saveAll(eventosExpirados); // Atualiza todos no banco de uma vez
         }

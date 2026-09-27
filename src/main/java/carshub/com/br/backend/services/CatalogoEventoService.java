@@ -38,17 +38,17 @@ public class CatalogoEventoService {
     }
 
     private CatalogoEventoResponseDTO montarDTO(Evento evento, UUID idEntusiastaLogado) {
-        int vagasOcupadas = inscricaoRepository.countByEvento_IdEventoAndStatus(evento.getIdEvento(), StatusInscricao.CONFIRMADA);
+        int vagasOcupadas = inscricaoRepository.countByEvento_IdAndStatus(evento.getId(), StatusInscricao.CONFIRMADA);
         int vagasDisponiveis = Math.max(0, evento.getLimiteParticipantes() - vagasOcupadas);
 
         boolean isInscrito = false;
         if (idEntusiastaLogado != null) {
-            isInscrito = inscricaoRepository.existsByEntusiasta_IdAndEvento_IdEventoAndStatus(
-                    idEntusiastaLogado, evento.getIdEvento(), StatusInscricao.CONFIRMADA);
+            isInscrito = inscricaoRepository.existsByEntusiasta_IdAndEvento_IdAndStatus(
+                    idEntusiastaLogado, evento.getId(), StatusInscricao.CONFIRMADA);
         }
 
         return new CatalogoEventoResponseDTO(
-                evento.getIdEvento(),
+                evento.getId(),
                 evento.getNome(),
                 evento.getDescricao(),
                 evento.getPreco(),

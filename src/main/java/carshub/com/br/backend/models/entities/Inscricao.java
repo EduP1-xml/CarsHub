@@ -21,11 +21,11 @@ public class Inscricao {
     @GeneratedValue(strategy = GenerationType.UUID)
     @JdbcTypeCode(Types.BINARY)
     @Column(name = "id_Inscricao", updatable = false, nullable = false)
-    private UUID idInscricao;
+    private UUID id;
 
     @NotNull
     @ManyToOne(optional = false)
-    @JoinColumn(name = "id_Entusiasta_Inscricao", referencedColumnName = "idEntusiasta", nullable = false)
+    @JoinColumn(name = "id_Entusiasta_Inscricao", referencedColumnName = "id_Entusiasta", nullable = false)
     private Entusiasta entusiasta;
 
     @NotNull
@@ -35,7 +35,7 @@ public class Inscricao {
 
     // Relacionamento Opcional: O Entusiasta pode ir a pé/carona ou levar um carro da sua garagem
     @ManyToOne
-    @JoinColumn(name = "id_CarroInscricao", referencedColumnName = "id_Carro")
+    @JoinColumn(name = "id_Carro_Inscricao", referencedColumnName = "id_Carro")
     private Carro carro;
 
     @NotNull

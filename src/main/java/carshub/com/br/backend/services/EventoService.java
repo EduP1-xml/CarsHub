@@ -195,7 +195,7 @@ public class EventoService {
 
     private EventoRespostaDTO mapearEntidadeParaResponse(Evento evento) {
         return new EventoRespostaDTO(
-                evento.getIdEvento(),
+                evento.getId(),
                 evento.getNome(),
                 evento.getPreco(),
                 evento.getDescricao(),

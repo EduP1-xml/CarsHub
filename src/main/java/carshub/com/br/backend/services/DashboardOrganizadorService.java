@@ -57,10 +57,10 @@ public class DashboardOrganizadorService {
 
     private HistoricoEventoResponseDTO mapearParaHistoricoDTO(Evento evento) {
         // Para o histórico, contamos todas as inscrições feitas no evento (seja confirmada ou não)
-        int participantes = inscricaoRepository.countByEvento_IdEvento(evento.getIdEvento());
+        int participantes = inscricaoRepository.countByEvento_Id(evento.getId());
 
         return new HistoricoEventoResponseDTO(
-                evento.getIdEvento(),
+                evento.getId(),
                 evento.getNome(),
                 evento.getStatus(),
                 evento.getLimiteParticipantes(),
