@@ -23,6 +23,9 @@ public class Mecanico extends PrestadorServico {
     @Column(name = "servicos_Mecanico")
     private List<ServicosOfertados> servicos;
 
+    @Column(name = "latitude_Mecanico")
     private Double latitude;
+
+    @Column(name = "longitude_Mecanico")
     private Double longitude;
 }

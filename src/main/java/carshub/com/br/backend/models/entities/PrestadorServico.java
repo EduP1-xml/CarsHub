@@ -1,6 +1,5 @@
 package carshub.com.br.backend.models.entities;
 
-
 import carshub.com.br.backend.models.enums.tiposUsuarios.TipoPrestadorServico;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -28,4 +27,10 @@ public abstract class PrestadorServico extends Usuario{
     @Enumerated(EnumType.STRING)// só definindo a forma de armazenamento desse Enum
     @Column(name = "tipoPrestadorServico_PrestadorServico", nullable = false)
     private TipoPrestadorServico tipoPrestadorServico;
+
+    @Column(name = "latitude_PrestadorServico")
+    private Double latitude;
+
+    @Column(name = "longitude_PrestadorServico")
+    private Double longitude;
 }

@@ -1,6 +1,5 @@
 package carshub.com.br.backend.models.entities;
 
-
 import carshub.com.br.backend.models.enums.tiposUsuarios.TipoUsuario;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -32,13 +31,13 @@ public class Usuario implements UserDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @JdbcTypeCode(java.sql.Types.BINARY)// troca a forma de armazenamento do UUID de varchar256 para binary16, poupando espaço no DB
+    @JdbcTypeCode(java.sql.Types.BINARY)
     @Column(name = "id_Usuario", updatable = false, nullable = false, columnDefinition = "BINARY(16)")
     private UUID id;
 
     @NotBlank(message = "O login/email não pode ser vazio")
     @Email(message = "Formato de e-mail inválido")
-    @Size(min = 11,max = 45)
+    @Size(min = 11, max = 45)
     @Column(name = "login_Usuario", length = 45, nullable = false, unique = true)
     private String login;
 
@@ -67,23 +66,32 @@ public class Usuario implements UserDetails {
     private TipoUsuario tipoUsuario;
 
     @CreationTimestamp
-    @Column(name = "data_hora_usuario", nullable = false, updatable = false, columnDefinition = "DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6)")
+    @Column(name = "dataHora_Usuario", nullable = false, updatable = false, columnDefinition = "DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6)")
     private LocalDateTime dataHora;
 
-    @Column(name = "codigoVerificacao_Usuario")
-    @JsonIgnore
-    private String codigoVerificacao;
-
-    @Column(name = "expiracaoCodigoVerificacao")
-    @JsonIgnore
-    private LocalDateTime expiracaoCodigoVerificacao;
-
-    @Column(name = "ativo")
+    @Column(name = "ativo_Usuario")
     private Boolean ativo;
 
-    @Column(name = "urlFotoPerfil")
+    @Column(name = "urlFotoPerfil_Usuario")
     private String urlFotoPerfil;
 
+    // --- Codigo de ativacao de conta ---
+    @JsonIgnore
+    @Column(name = "codigoVerificacao_Usuario")
+    private String codigoVerificacao;
+
+    @JsonIgnore
+    @Column(name = "expiracaoCodigoVerificacao_Usuario")
+    private LocalDateTime expiracaoCodigoVerificacao;
+
+    // --- Codigo de redefinicao de senha (fluxos logado e deslogado) ---
+    @JsonIgnore
+    @Column(name = "codigoRedefinicaoSenha_Usuario")
+    private String codigoRedefinicaoSenha;
+
+    @JsonIgnore
+    @Column(name = "expiracaoCodigoRedefinicaoSenha_Usuario")
+    private LocalDateTime expiracaoCodigoRedefinicaoSenha;
 
     @Override
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)

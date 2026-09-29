@@ -8,10 +8,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class EmailService {
 
-    private final JavaMailSender mailSender;
+    private final JavaMailSender remetenteEmail;
 
-    // Template base unificado - Escapamos os símbolos '%' do CSS com '%%' para usar o String.format
-    private static final String BASE_HTML_TEMPLATE = """
+    // Template base unificado - Escapamos os simbolos '%' do CSS com '%%' para usar o String.format
+    private static final String TEMPLATE_HTML_BASE = """
             <!DOCTYPE html>
             <html lang="pt-BR">
             <head>
@@ -126,93 +126,95 @@ public class EmailService {
             </html>
             """;
 
-    public EmailService(JavaMailSender mailSender) {
-        this.mailSender = mailSender;
+    public EmailService(JavaMailSender remetenteEmail) {
+        this.remetenteEmail = remetenteEmail;
     }
 
-    public JavaMailSender getMailSender() {
-        return mailSender;
+    public JavaMailSender obterRemetenteEmail() {
+        return remetenteEmail;
     }
 
     /**
-     * Método central que insere os textos dinamicamente no Template Base
+     * Metodo central que insere os textos dinamicamente no template base.
      */
-    private void sendGenericEmail(String to, String subject, String pageTitle, String icon, String mainTitle, String bodyText, String code, String expirationText, String warningText) {
+    private void enviarEmailGenerico(String destinatario, String assunto, String tituloPagina,
+                                     String icone, String tituloPrincipal, String textoCorpo,
+                                     String codigo, String textoExpiracao, String textoAviso) {
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "utf-8");
+            MimeMessage mensagemMime = remetenteEmail.createMimeMessage();
+            MimeMessageHelper auxiliar = new MimeMessageHelper(mensagemMime, "utf-8");
 
-            // Injeta as variáveis na ordem exata usando String.format
-            String finalHtml = String.format(BASE_HTML_TEMPLATE,
-                    pageTitle, icon, mainTitle, bodyText, code, expirationText, warningText);
+            // Injeta as variaveis na ordem exata usando String.format
+            String htmlFinal = String.format(TEMPLATE_HTML_BASE,
+                    tituloPagina, icone, tituloPrincipal, textoCorpo, codigo, textoExpiracao, textoAviso);
 
-            helper.setText(finalHtml, true);
-            helper.setTo(to);
-            helper.setSubject(subject);
-            helper.setFrom("CarsHub <noreply@carshub.com.br>");
+            auxiliar.setText(htmlFinal, true);
+            auxiliar.setTo(destinatario);
+            auxiliar.setSubject(assunto);
+            auxiliar.setFrom("CarsHub <noreply@carshub.com.br>");
 
-            mailSender.send(mimeMessage);
+            remetenteEmail.send(mensagemMime);
 
-        } catch (Exception error) {
-            throw new RuntimeException("Erro ao enviar e-mail HTML: " + error.getMessage());
+        } catch (Exception erro) {
+            throw new RuntimeException("Erro ao enviar e-mail HTML: " + erro.getMessage());
         }
     }
 
-    // 1. Criação de Conta
-    public void sendVerificationCode(String to, String code) {
-        sendGenericEmail(
-                to,
-                "🚘 " + code + " é o seu código de ignição - CarsHub",
+    // 1. Criacao de conta
+    public void enviarCodigoVerificacao(String destinatario, String codigo) {
+        enviarEmailGenerico(
+                destinatario,
+                "🚘 " + codigo + " é o seu código de ignição - CarsHub",
                 "Código de Ignição",
-                "&#128662;", // Ícone de carro clássico
+                "&#128662;", // Icone de carro classico
                 "Bem-vindo(a) à Garagem!",
                 "Os motores estão aquecendo! Para concluir sua matrícula e ter acesso ao acervo exclusivo de clássicos, por favor, dê a partida confirmando seu e-mail com o código abaixo.",
-                code,
+                codigo,
                 "Sua chave de ignição é válida por <strong>10 minutos</strong>.",
                 "Se você não estacionou no CarsHub, por favor ignore esta mensagem."
         );
     }
 
-    // 2. Recuperação de Senha (Antiga EmailSenha)
-    public void sendPasswordResetCode(String to, String code) {
-        sendGenericEmail(
-                to,
-                "🗝️ Seu código de recuperação de chaves - CarsHub: " + code,
+    // 2. Recuperacao e alteracao de senha
+    public void enviarCodigoRedefinicaoSenha(String destinatario, String codigo) {
+        enviarEmailGenerico(
+                destinatario,
+                "🗝️ Seu código de recuperação de chaves - CarsHub: " + codigo,
                 "Recuperação de Chaves",
-                "&#128477;", // Ícone de chave clássica
+                "&#128477;", // Icone de chave classica
                 "Manutenção de Chaves",
                 "Olá! Parece que você perdeu as chaves do seu clássico. Recebemos uma solicitação para resetar a senha da sua conta CarsHub. Use o código abaixo para forjar uma nova chave de acesso:",
-                code,
+                codigo,
                 "Este código de emergência expira em <strong>10 minutos</strong>.",
                 "Se você não solicitou a troca de chaves, ignore esta mensagem. Seu veículo continua seguro e trancado."
         );
     }
 
     // 3. Login com 2FA
-    public void sendTwoFactorAuthCode(String to, String code) {
-        sendGenericEmail(
-                to,
-                "🗝️ " + code + " é sua chave de acesso - CarsHub",
+    public void enviarCodigoDuploFator(String destinatario, String codigo) {
+        enviarEmailGenerico(
+                destinatario,
+                "🗝️ " + codigo + " é sua chave de acesso - CarsHub",
                 "Chave de Acesso da Garagem",
-                "&#128477;", // Ícone de chave antiga
+                "&#128477;", // Icone de chave antiga
                 "Acesso Restrito (2FA)",
                 "Ouvimos os motores ligarem. Para garantir que é realmente você atrás do volante, utilize a chave de verificação abaixo para acessar sua conta.",
-                code,
+                codigo,
                 "Este código é válido por <strong>5 minutos</strong>.",
                 "Se você não tentou fazer o login, puxe o freio de mão e altere sua senha imediatamente."
         );
     }
 
-    // 4. Habilitação do 2FA
-    public void sendEnableTwoFactorCode(String to, String code) {
-        sendGenericEmail(
-                to,
-                "🛠️ " + code + " é o seu código para ativar 2FA - CarsHub",
+    // 4. Habilitacao do 2FA
+    public void enviarCodigoAtivacaoDuploFator(String destinatario, String codigo) {
+        enviarEmailGenerico(
+                destinatario,
+                "🛠️ " + codigo + " é o seu código para ativar 2FA - CarsHub",
                 "Blindagem da Frota",
-                "&#128736;", // Ícone de ferramentas
+                "&#128736;", // Icone de ferramentas
                 "Blindagem Engatada",
                 "Você solicitou um reforço extra de segurança na sua conta (2FA). Utilize o código abaixo para finalizar essa manutenção e manter sua garagem protegida.",
-                code,
+                codigo,
                 "Este código é válido por <strong>10 minutos</strong>.",
                 "Se você não solicitou essa blindagem extra, por favor ignore este e-mail."
         );

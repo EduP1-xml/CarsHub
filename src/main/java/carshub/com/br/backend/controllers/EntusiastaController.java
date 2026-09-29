@@ -1,5 +1,6 @@
 package carshub.com.br.backend.controllers;
 
+import carshub.com.br.backend.models.dtos.AlteracaoSenhaDTO;
 import carshub.com.br.backend.models.dtos.LatitudeLongitudeDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilEntusiastaPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilEntusiastaPutDTO;
@@ -58,14 +59,27 @@ public class EntusiastaController {
             @RequestHeader("user-id") UUID id,
             @RequestParam("arquivo") MultipartFile arquivo) {
         try {
-            // Nota: usando o nome atual do método no FileStorageService
-            String uriDownloadArquivo = servicoArmazenamentoArquivo.uploadFotoPerfil(id, arquivo);
-            return ResponseEntity.ok(uriDownloadArquivo);
+            String uriDownloadArquivo = servicoArmazenamentoArquivo.salvarFotoPerfil(id, arquivo);
+            return ResponseEntity.status(HttpStatus.CREATED).body(uriDownloadArquivo);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Erro ao salvar imagem: " + e.getMessage());
         }
+    }
+
+    @PostMapping("/senha/solicitar-codigo")
+    public ResponseEntity<String> solicitarCodigoAlteracaoSenha(@RequestHeader("user-id") UUID id) {
+        servicoEntusiasta.solicitarCodigoAlteracaoSenha(id);
+        return ResponseEntity.ok("Enviamos um código de verificação para o seu e-mail.");
+    }
+
+    @PatchMapping("/senha")
+    public ResponseEntity<String> alterarSenha(
+            @RequestHeader("user-id") UUID id,
+            @Valid @RequestBody AlteracaoSenhaDTO dados) {
+        servicoEntusiasta.alterarSenha(id, dados);
+        return ResponseEntity.ok("Senha alterada com sucesso.");
     }
 }

@@ -32,7 +32,10 @@ public class Entusiasta extends Usuario {
     @OneToOne(mappedBy = "entusiasta", cascade = CascadeType.ALL, orphanRemoval = true)
     private Colecionador colecionador;
 
+    @Column(name = "latitude_Entusiasta")
     private Double latitude;
+
+    @Column(name = "longitude_Entusiasta")
     private Double longitude;
 
     // ========================================================

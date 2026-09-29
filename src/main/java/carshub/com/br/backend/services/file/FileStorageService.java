@@ -3,7 +3,7 @@ package carshub.com.br.backend.services.file;
 import carshub.com.br.backend.models.entities.Usuario;
 import carshub.com.br.backend.repositories.UsuarioRepository;
 import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -17,116 +17,131 @@ import java.nio.file.Paths;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class FileStorageService {
 
-    private Path arquivo;
+    private final UsuarioRepository repositorioUsuario;
+
+    // Diretorio fisico onde os arquivos sao gravados.
+    private Path diretorioArmazenamento;
+
     @Value("${app.upload.dir:uploads}")
-    private String uploadDir;
-    @Autowired
-    private UsuarioRepository userRepository;
+    private String diretorioUpload;
 
     @PostConstruct
-    public void initFileLocation() {
+    public void inicializarDiretorio() {
         try {
-            this.arquivo = Paths.get(uploadDir).toAbsolutePath().normalize();
-            Files.createDirectories(this.arquivo);
+            this.diretorioArmazenamento = Paths.get(diretorioUpload).toAbsolutePath().normalize();
+            Files.createDirectories(this.diretorioArmazenamento);
         } catch (Exception ex) {
             throw new RuntimeException("Não foi possível criar o diretório de uploads.", ex);
         }
     }
 
-    // --- MÉTODOS DE SEGURANÇA AUXILIARES ---
+    // --- METODOS DE SEGURANCA AUXILIARES ---
 
-    private String obterNomeSeguro(MultipartFile file) {
+    private String obterNomeSeguro(MultipartFile arquivo) {
         // Remove caracteres maliciosos (../) que causam Path Traversal
-        String originalName = StringUtils.cleanPath(file.getOriginalFilename() != null ? file.getOriginalFilename() : "");
-        if (originalName.contains("..")) {
+        String nomeOriginal = StringUtils.cleanPath(
+                arquivo.getOriginalFilename() != null ? arquivo.getOriginalFilename() : "");
+        if (nomeOriginal.contains("..")) {
             throw new RuntimeException("Tentativa bloqueada");
         }
-        return originalName;
+        return nomeOriginal;
     }
 
-    private void validarSegurancaGeral(String fileName) {
-        // Bloqueia XSS e vírus. Permite apenas imagens e documentos seguros.
-        String ext = fileName.toLowerCase();
-        if (!ext.endsWith(".jpg") && !ext.endsWith(".jpeg") && !ext.endsWith(".png") &&
-                !ext.endsWith(".pdf") && !ext.endsWith(".docx")) {
+    private void validarSegurancaGeral(String nomeArquivo) {
+        // Bloqueia XSS e virus. Permite apenas imagens e documentos seguros.
+        String extensao = nomeArquivo.toLowerCase();
+        if (!extensao.endsWith(".jpg") && !extensao.endsWith(".jpeg") && !extensao.endsWith(".png") &&
+                !extensao.endsWith(".pdf") && !extensao.endsWith(".docx")) {
             throw new RuntimeException("Envie apenas Imagens ou Documentos (PDF/DOCX).");
         }
     }
 
+    private void exigirFormatoDeImagem(String nomeArquivo) {
+        String extensao = nomeArquivo.toLowerCase();
+        if (!extensao.endsWith(".jpg") && !extensao.endsWith(".jpeg") && !extensao.endsWith(".png")) {
+            throw new RuntimeException("Formato de arquivo inválido. Por favor, envie apenas imagens (JPG, JPEG ou PNG).");
+        }
+    }
 
-    public String salvarArquivo(MultipartFile file) {
+    private String gerarNomeUnico(String nomeOriginal) {
+        return UUID.randomUUID().toString() + "_" + nomeOriginal;
+    }
+
+    private String montarUriDeDownload(String nomeArquivo) {
+        return ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/uploads/")
+                .path(nomeArquivo)
+                .toUriString();
+    }
+
+    // --- METODOS PUBLICOS ---
+
+    /**
+     * Salva uma imagem (JPG, JPEG ou PNG) e devolve a URI publica de acesso.
+     */
+    public String salvarArquivo(MultipartFile arquivo) {
         try {
-            String originalName = obterNomeSeguro(file);
-            validarSegurancaGeral(originalName);
+            String nomeOriginal = obterNomeSeguro(arquivo);
+            validarSegurancaGeral(nomeOriginal);
+            exigirFormatoDeImagem(nomeOriginal);
 
-            String ext = originalName.toLowerCase();
-            if (!ext.endsWith(".jpg") && !ext.endsWith(".jpeg") && !ext.endsWith(".png")) {
-                throw new RuntimeException("Formato de arquivo inválido. Por favor, envie apenas imagens (JPG, JPEG ou PNG).");
-            }
+            String nomeArquivo = gerarNomeUnico(nomeOriginal);
+            Path destino = this.diretorioArmazenamento.resolve(nomeArquivo);
 
-            String fileName = UUID.randomUUID().toString() + "_" + originalName;
-            Path targetLocation = this.arquivo.resolve(fileName);
+            Files.copy(arquivo.getInputStream(), destino);
 
-            // Salva apenas se passou nas validações
-            Files.copy(file.getInputStream(), targetLocation);
-
-            return ServletUriComponentsBuilder.fromCurrentContextPath()
-                    .path("/uploads/")
-                    .path(fileName)
-                    .toUriString();
+            return montarUriDeDownload(nomeArquivo);
         } catch (IOException e) {
             throw new RuntimeException("Erro ao salvar arquivo", e);
         }
     }
 
-    public String salvarArquivoGeral(MultipartFile file) {
+    /**
+     * Salva imagens ou documentos (PDF/DOCX) e devolve a URI publica de acesso.
+     * A validacao geral barra .html, evitando XSS.
+     */
+    public String salvarArquivoGeral(MultipartFile arquivo) {
         try {
-            String originalName = obterNomeSeguro(file);
+            String nomeOriginal = obterNomeSeguro(arquivo);
+            validarSegurancaGeral(nomeOriginal);
 
-            // Aqui a validação geral permite PDF e DOCX, mas barra .html (evitando XSS)
-            validarSegurancaGeral(originalName);
+            String nomeArquivo = gerarNomeUnico(nomeOriginal);
+            Path destino = this.diretorioArmazenamento.resolve(nomeArquivo);
 
-            String fileName = UUID.randomUUID().toString() + "_" + originalName;
-            Path targetLocation = this.arquivo.resolve(fileName);
+            Files.copy(arquivo.getInputStream(), destino);
 
-            Files.copy(file.getInputStream(), targetLocation);
-
-            return ServletUriComponentsBuilder.fromCurrentContextPath()
-                    .path("/uploads/")
-                    .path(fileName)
-                    .toUriString();
+            return montarUriDeDownload(nomeArquivo);
         } catch (IOException e) {
             throw new RuntimeException("Erro ao salvar arquivo", e);
         }
     }
 
-    public String uploadFotoPerfil(UUID id, MultipartFile file) {
-        Usuario user = userRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Usuário não encontrado."));
+    /**
+     * Salva a foto de perfil do usuario, atualiza a coluna urlFotoPerfil e
+     * devolve a URI publica de acesso.
+     */
+    public String salvarFotoPerfil(UUID id, MultipartFile arquivo) {
+        Usuario usuario = repositorioUsuario.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Usuário não encontrado."));
         try {
-            String originalName = obterNomeSeguro(file);
-            validarSegurancaGeral(originalName);
+            String nomeOriginal = obterNomeSeguro(arquivo);
+            validarSegurancaGeral(nomeOriginal);
+            exigirFormatoDeImagem(nomeOriginal);
 
-            String ext = originalName.toLowerCase();
-            if (!ext.endsWith(".jpg") && !ext.endsWith(".jpeg") && !ext.endsWith(".png")) {
-                throw new RuntimeException("Formato de arquivo inválido. Por favor, envie apenas imagens (JPG, JPEG ou PNG).");
-            }
+            String nomeArquivo = gerarNomeUnico(nomeOriginal);
+            Path destino = this.diretorioArmazenamento.resolve(nomeArquivo);
 
-            String fileName = UUID.randomUUID().toString() + "_" + originalName;
-            Path targetLocation = this.arquivo.resolve(fileName);
+            Files.copy(arquivo.getInputStream(), destino);
 
-            Files.copy(file.getInputStream(), targetLocation);
+            String uriDownloadArquivo = montarUriDeDownload(nomeArquivo);
 
-            String fileDownloadUri = ServletUriComponentsBuilder.fromCurrentContextPath()
-                    .path("/uploads/")
-                    .path(fileName)
-                    .toUriString();
+            usuario.setUrlFotoPerfil(uriDownloadArquivo);
+            repositorioUsuario.save(usuario);
 
-            user.setUrlFotoPerfil(fileDownloadUri);
-            userRepository.save(user);
-
-            return fileDownloadUri;
+            return uriDownloadArquivo;
         } catch (Exception e) {
             throw new RuntimeException("Erro ao salvar imagem: " + e.getMessage(), e);
         }

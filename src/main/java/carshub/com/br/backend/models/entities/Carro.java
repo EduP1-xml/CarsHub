@@ -41,7 +41,7 @@ public class Carro {
 
     @NotNull(message = "O ano é obrigatório")
     @Min(value = 1886, message = "O ano mínimo que seu carro pode ser é 1886, quando o primeiro carro do mundo foi feito")
-    @Column(name = "Ano", length = 4, nullable = false)
+    @Column(name = "ano_Carro", length = 4, nullable = false)
     private Integer ano;
 
     @NotBlank(message = "A cor é obrigatório")
@@ -160,5 +160,8 @@ public class Carro {
     @JoinColumn(name = "idColecionador_Carro", referencedColumnName = "id_Colecionador", nullable = false)
     private Colecionador colecionador;
 
+    @ElementCollection
+    @CollectionTable(name = "FotosCarro_Carro", joinColumns = @JoinColumn(name = "idCarro_Carro"))
+    @Column(name = "fotosCarro_Carro")
     private List<String> fotosCarro;
 }

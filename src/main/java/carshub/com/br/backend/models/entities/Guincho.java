@@ -23,6 +23,9 @@ public class Guincho extends PrestadorServico {
     @Column(name = "placa_Guincho", length = 7, unique = true, nullable = false)
     private String placa;
 
+    @Column(name = "latitude_Guincho")
     private Double latitude;
+
+    @Column(name = "longitude_Guincho")
     private Double longitude;
 }

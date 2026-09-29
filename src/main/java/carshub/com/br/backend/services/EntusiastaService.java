@@ -1,11 +1,13 @@
 package carshub.com.br.backend.services;
 
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
+import carshub.com.br.backend.models.dtos.AlteracaoSenhaDTO;
 import carshub.com.br.backend.models.dtos.LatitudeLongitudeDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilEntusiastaPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilEntusiastaPutDTO;
 import carshub.com.br.backend.models.entities.Entusiasta;
 import carshub.com.br.backend.repositories.EntusiastaRepository;
+import carshub.com.br.backend.services.credenciais.AlteracaoSenhaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,13 +19,13 @@ import java.util.UUID;
 public class EntusiastaService {
 
     private final EntusiastaRepository repositorioEntusiasta;
+    private final AlteracaoSenhaService servicoAlteracaoSenha;
 
     @Transactional
     public Entusiasta substituirPerfil(UUID id, PerfilEntusiastaPutDTO dados) {
         Entusiasta entusiasta = buscarEntusiastaOuLancarExcecao(id);
 
         entusiasta.setNome(dados.nome());
-        entusiasta.setSenha(dados.senha());
         entusiasta.setTelefone(dados.telefone());
 
         return repositorioEntusiasta.save(entusiasta);
@@ -34,7 +36,6 @@ public class EntusiastaService {
         Entusiasta entusiasta = buscarEntusiastaOuLancarExcecao(id);
 
         if (dados.nome() != null && !dados.nome().isBlank()) entusiasta.setNome(dados.nome());
-        if (dados.senha() != null && !dados.senha().isBlank()) entusiasta.setSenha(dados.senha());
         if (dados.telefone() != null && !dados.telefone().isBlank()) entusiasta.setTelefone(dados.telefone());
 
         return repositorioEntusiasta.save(entusiasta);
@@ -42,9 +43,21 @@ public class EntusiastaService {
 
     @Transactional
     public Entusiasta atualizarLocalizacao(LatitudeLongitudeDTO dados, UUID id) {
-        Entusiasta entidadeEntusiasta = buscarEntusiastaOuLancarExcecao(id);
-        atualizarCoordenadas(entidadeEntusiasta, dados);
-        return repositorioEntusiasta.save(entidadeEntusiasta);
+        Entusiasta entusiasta = buscarEntusiastaOuLancarExcecao(id);
+        atualizarCoordenadas(entusiasta, dados);
+        return repositorioEntusiasta.save(entusiasta);
+    }
+
+    // --- Alteracao de senha (fluxo logado) ---
+
+    @Transactional
+    public void solicitarCodigoAlteracaoSenha(UUID id) {
+        servicoAlteracaoSenha.solicitarCodigoAlteracao(buscarEntusiastaOuLancarExcecao(id));
+    }
+
+    @Transactional
+    public void alterarSenha(UUID id, AlteracaoSenhaDTO dados) {
+        servicoAlteracaoSenha.alterarSenha(buscarEntusiastaOuLancarExcecao(id), dados);
     }
 
     private Entusiasta buscarEntusiastaOuLancarExcecao(UUID id) {
@@ -52,12 +65,12 @@ public class EntusiastaService {
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Entusiasta não encontrado."));
     }
 
-    private void atualizarCoordenadas(Entusiasta entidade, LatitudeLongitudeDTO dados) {
+    private void atualizarCoordenadas(Entusiasta entusiasta, LatitudeLongitudeDTO dados) {
         if (dados.latitude() != null) {
-            entidade.setLatitude(dados.latitude());
+            entusiasta.setLatitude(dados.latitude());
         }
         if (dados.longitude() != null) {
-            entidade.setLongitude(dados.longitude());
+            entusiasta.setLongitude(dados.longitude());
         }
     }
 }

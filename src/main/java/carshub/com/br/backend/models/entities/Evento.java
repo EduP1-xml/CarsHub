@@ -87,7 +87,7 @@ public class Evento {
     private OrganizadorEvento organizadorEvento;
 
     @ElementCollection
-    @CollectionTable(name = "UrlFoto_Evento", joinColumns = @JoinColumn(name = "idEvento_Evento"))
+    @CollectionTable(name = "UrlFoto_Evento", joinColumns = @JoinColumn(name = "id_Evento"))
     @Column(name = "urlFotoEvento_Evento")
     private List<String> urlFotoEvento;
 
