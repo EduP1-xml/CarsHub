@@ -9,16 +9,8 @@ import carshub.com.br.backend.services.email.EmailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
-/**
- * Centraliza os dois fluxos de troca de senha:
- *
- *   LOGADO    - solicitado pelo perfil do usuario; a identidade vem da sessao.
- *   DESLOGADO - "esqueci minha senha"; a identidade vem do e-mail informado.
- *
- * Em ambos os casos e obrigatorio confirmar um codigo enviado por e-mail antes
- * de a nova senha ser aceita.
- */
 @Service
 @RequiredArgsConstructor
 public class AlteracaoSenhaService {
@@ -27,14 +19,22 @@ public class AlteracaoSenhaService {
     private final CredencialService servicoCredencial;
     private final CodigoVerificacaoService servicoCodigoVerificacao;
     private final EmailService servicoEmail;
+    private final TransactionTemplate templateTransacao;
 
     // ==================================================================
     // FLUXO LOGADO
     // ==================================================================
 
-    @Transactional
     public void solicitarCodigoAlteracao(Usuario usuario) {
-        enviarCodigo(usuario);
+        String codigo = templateTransacao.execute(
+                status -> gerarCodigoRedefinicao(usuario.getId()));
+
+        if (codigo == null) {
+            throw new RegraDeNegocioException("Não foi possível gerar um novo código. Tente novamente.");
+        }
+
+        // Fora da transacao. Falha propaga como 503: o objetivo e entregar o codigo.
+        servicoEmail.enviarCodigoRedefinicaoSenha(usuario.getLogin(), codigo);
     }
 
     @Transactional
@@ -51,14 +51,18 @@ public class AlteracaoSenhaService {
     // ==================================================================
     // FLUXO DESLOGADO
     // ==================================================================
-
-    /**
-     * A resposta e sempre a mesma, exista ou nao o e-mail, para nao permitir
-     * que alguem descubra quais contas existem na plataforma.
-     */
-    @Transactional
     public void solicitarCodigoRedefinicao(String email) {
-        repositorioUsuario.findByLogin(email).ifPresent(this::enviarCodigo);
+        String codigo = templateTransacao.execute(status ->
+                repositorioUsuario.findByLogin(email)
+                        .map(usuario -> gerarCodigoRedefinicao(usuario.getId()))
+                        .orElse(null));
+
+        // E-mail inexistente: encerra silenciosamente, sem enviar nada.
+        if (codigo == null) {
+            return;
+        }
+
+        servicoEmail.enviarCodigoRedefinicaoSenha(email, codigo);
     }
 
     @Transactional
@@ -74,23 +78,21 @@ public class AlteracaoSenhaService {
 
         aplicarNovaSenha(usuario, dados.novaSenha());
     }
-
     // ==================================================================
-    // METODOS AUXILIARES
+    // METODOS AUXILIARES (executados dentro da transacao)
     // ==================================================================
 
-    private void enviarCodigo(Usuario usuario) {
+    private String gerarCodigoRedefinicao(java.util.UUID idUsuario) {
+        Usuario usuario = repositorioUsuario.findById(idUsuario)
+                .orElseThrow(() -> new RegraDeNegocioException("Usuário não encontrado."));
+
+        // Codigo novo substitui o anterior e reinicia o prazo de 10 minutos.
         String codigo = servicoCodigoVerificacao.gerarCodigo();
         usuario.setCodigoRedefinicaoSenha(codigo);
         usuario.setExpiracaoCodigoRedefinicaoSenha(servicoCodigoVerificacao.calcularExpiracao());
         repositorioUsuario.save(usuario);
 
-        try {
-            servicoEmail.enviarCodigoRedefinicaoSenha(usuario.getLogin(), codigo);
-        }
-        catch (Exception e) {
-            throw new RuntimeException("Erro ao enviar e-mail de recuperação.", e);
-        }
+        return codigo;
     }
 
     private void aplicarNovaSenha(Usuario usuario, String novaSenha) {

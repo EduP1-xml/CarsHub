@@ -84,7 +84,10 @@ public class Usuario implements UserDetails {
     @Column(name = "expiracaoCodigoVerificacao_Usuario")
     private LocalDateTime expiracaoCodigoVerificacao;
 
-    // --- Codigo de redefinicao de senha (fluxos logado e deslogado) ---
+    @JsonIgnore
+    @Column(name = "dataEnvioCodigoVerificacao_Usuario")
+    private LocalDateTime dataEnvioCodigoVerificacao;
+
     @JsonIgnore
     @Column(name = "codigoRedefinicaoSenha_Usuario")
     private String codigoRedefinicaoSenha;

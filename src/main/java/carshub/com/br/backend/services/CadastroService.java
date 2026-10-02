@@ -3,6 +3,7 @@ package carshub.com.br.backend.services;
 import carshub.com.br.backend.exceptions.CampoObrigatorioException;
 import carshub.com.br.backend.exceptions.DocumentoJaCadastradoException;
 import carshub.com.br.backend.exceptions.EmailJaCadastradoException;
+import carshub.com.br.backend.exceptions.FalhaEnvioEmailException;
 import carshub.com.br.backend.exceptions.PlacaJaCadastradaException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.exceptions.RegraDeNegocioException;
@@ -24,15 +25,36 @@ import carshub.com.br.backend.services.credenciais.CodigoVerificacaoService;
 import carshub.com.br.backend.services.credenciais.CredencialService;
 import carshub.com.br.backend.services.email.EmailService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+/**
+ * Orquestra o cadastro em tres etapas:
+ *   1. /cadastrar            - dados de Usuario
+ *   2. /cadastrar/individual - CPF, CNPJ, placa e servicos
+ *   3. /cadastrar/verificarRegistro - confirmacao do codigo enviado por e-mail
+ *
+ * Ha ainda o /cadastrar/reenviarCodigo, para quando o codigo expira ou nao chega.
+ *
+ * REGRA DE TRANSACAO: o envio de e-mail NUNCA ocorre dentro de uma transacao.
+ * A persistencia acontece em uma transacao curta via TransactionTemplate e o
+ * envio ocorre DEPOIS do commit.
+ */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CadastroService implements UserDetailsService {
+
+    private static final long intervaloMinimoReenvioSegundos = 60;
 
     private final UsuarioRepository repositorioUsuario;
     private final EntusiastaRepository repositorioEntusiasta;
@@ -42,6 +64,7 @@ public class CadastroService implements UserDetailsService {
     private final CredencialService servicoCredencial;
     private final CodigoVerificacaoService servicoCodigoVerificacao;
     private final EmailService servicoEmail;
+    private final TransactionTemplate templateTransacao;
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
@@ -53,8 +76,28 @@ public class CadastroService implements UserDetailsService {
     // ETAPA 1 - DADOS DE USUARIO
     // ==================================================================
 
-    @Transactional
     public void registrarUsuario(CadastroDTO dados) {
+        // Transacao curta: apenas validacao e persistencia.
+        String codigo = templateTransacao.execute(status -> salvarNovoUsuario(dados));
+
+        if (codigo == null) {
+            throw new RegraDeNegocioException("Não foi possível concluir o cadastro. Tente novamente.");
+        }
+
+        // Fora da transacao: a conta ja esta commitada.
+        try {
+            servicoEmail.enviarCodigoVerificacao(dados.login(), codigo);
+        }
+        catch (FalhaEnvioEmailException e) {
+            // A conta FOI criada. Nao fazemos rollback: seria pior perder o
+            // cadastro por causa de um servico externo. O cliente recebe 201 e
+            // orientacao para usar o reenvio de codigo.
+            log.warn("Conta criada, mas o e-mail de verificação falhou para {}. "
+                    + "O usuário deve solicitar reenvio do código.", dados.login(), e);
+        }
+    }
+
+    private String salvarNovoUsuario(CadastroDTO dados) {
         if (repositorioUsuario.findByLogin(dados.login()).isPresent()) {
             throw new EmailJaCadastradoException("E-mail já cadastrado na plataforma.");
         }
@@ -69,20 +112,16 @@ public class CadastroService implements UserDetailsService {
         novoUsuario.setDataNascimento(dados.dataNascimento());
         novoUsuario.setTelefone(dados.telefone());
         novoUsuario.setTipoUsuario(dados.tipoUsuario());
-        novoUsuario.setAtivo(false); // Conta nasce inativa ate validar o e-mail
+        novoUsuario.setAtivo(false); // Só vira true na confirmacao do codigo
 
         String codigo = servicoCodigoVerificacao.gerarCodigo();
         novoUsuario.setCodigoVerificacao(codigo);
         novoUsuario.setExpiracaoCodigoVerificacao(servicoCodigoVerificacao.calcularExpiracao());
+        novoUsuario.setDataEnvioCodigoVerificacao(LocalDateTime.now());
 
         repositorioUsuario.save(novoUsuario);
 
-        try {
-            servicoEmail.enviarCodigoVerificacao(novoUsuario.getLogin(), codigo);
-        }
-        catch (Exception e) {
-            throw new RuntimeException("Falha ao enviar e-mail de ativação. Tente novamente mais tarde.");
-        }
+        return codigo;
     }
 
     // ==================================================================
@@ -179,12 +218,10 @@ public class CadastroService implements UserDetailsService {
         Usuario usuario = repositorioUsuario.findByLogin(email)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Usuário não encontrado para o e-mail informado."));
 
-        // Caso 1: a conta existe mas o e-mail ja foi confirmado antes.
         if (Boolean.TRUE.equals(usuario.getAtivo())) {
             throw new RegraDeNegocioException("Esta conta já foi verificada anteriormente. Faça login para continuar.");
         }
 
-        // Caso 2: a conta existe, ainda nao foi verificada, mas o codigo nao confere ou expirou.
         servicoCodigoVerificacao.validar(
                 usuario.getCodigoVerificacao(),
                 usuario.getExpiracaoCodigoVerificacao(),
@@ -193,7 +230,69 @@ public class CadastroService implements UserDetailsService {
         usuario.setAtivo(true);
         usuario.setCodigoVerificacao(null);
         usuario.setExpiracaoCodigoVerificacao(null);
+        usuario.setDataEnvioCodigoVerificacao(null);
         repositorioUsuario.save(usuario);
+    }
+
+    // ==================================================================
+    // REENVIO DO CODIGO DE ATIVACAO
+    // ==================================================================
+
+    /**
+     * Reenvio do codigo de ativacao (botao "Reenviar codigo" do front).
+     *
+     * Regras:
+     *   - intervalo minimo de 60 segundos entre dois reenvios;
+     *   - o codigo novo SUBSTITUI o anterior, que deixa de funcionar;
+     *   - o prazo de 10 minutos e reiniciado;
+     *   - se o codigo anterior expirou, a conta continua ativo = false ate que
+     *     o usuario confirme o novo codigo.
+     */
+    public void reenviarCodigoVerificacao(String email) {
+        String codigo = templateTransacao.execute(status -> renovarCodigoVerificacao(email));
+
+        if (codigo == null) {
+            throw new RegraDeNegocioException("Não foi possível gerar um novo código. Tente novamente.");
+        }
+
+        // Fora da transacao. Aqui a falha DEVE propagar (502/503/504): o objetivo
+        // unico desta operacao e justamente a entrega do e-mail.
+        servicoEmail.enviarCodigoVerificacao(email, codigo);
+    }
+
+    private String renovarCodigoVerificacao(String email) {
+        Usuario usuario = repositorioUsuario.findByLogin(email)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Usuário não encontrado para o e-mail informado."));
+
+        if (Boolean.TRUE.equals(usuario.getAtivo())) {
+            throw new RegraDeNegocioException("Esta conta já foi verificada. Faça login para continuar.");
+        }
+
+        aplicarCooldownDeReenvio(usuario);
+
+        String codigo = servicoCodigoVerificacao.gerarCodigo();
+        usuario.setCodigoVerificacao(codigo);
+        usuario.setExpiracaoCodigoVerificacao(servicoCodigoVerificacao.calcularExpiracao());
+        usuario.setDataEnvioCodigoVerificacao(LocalDateTime.now());
+        repositorioUsuario.save(usuario);
+
+        return codigo;
+    }
+
+    private void aplicarCooldownDeReenvio(Usuario usuario) {
+        LocalDateTime ultimoEnvio = usuario.getDataEnvioCodigoVerificacao();
+        if (ultimoEnvio == null) {
+            return;
+        }
+
+        LocalDateTime liberadoEm = ultimoEnvio.plusSeconds(intervaloMinimoReenvioSegundos);
+        LocalDateTime agora = LocalDateTime.now();
+
+        if (agora.isBefore(liberadoEm)) {
+            long segundosRestantes = Duration.between(agora, liberadoEm).toSeconds() + 1;
+            throw new RegraDeNegocioException(
+                    "Aguarde " + segundosRestantes + " segundo(s) para solicitar um novo código.");
+        }
     }
 
     // ==================================================================

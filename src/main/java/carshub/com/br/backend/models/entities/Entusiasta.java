@@ -19,8 +19,6 @@ import lombok.ToString;
 @NoArgsConstructor
 public class Entusiasta extends Usuario {
 
-    @NotBlank(message = "O CPF é obrigatório")
-    @Pattern(regexp = "\\d{11}", message = "O CPF deve conter exatamente 11 dígitos numéricos")
     @Column(name = "cpf_Entusiasta", length = 11, unique = true)
     private String cpf;
 

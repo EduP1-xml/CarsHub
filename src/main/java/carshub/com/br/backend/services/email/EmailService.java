@@ -1,17 +1,39 @@
 package carshub.com.br.backend.services.email;
 
+import carshub.com.br.backend.exceptions.AutenticacaoEnvioEmailException;
+import carshub.com.br.backend.exceptions.FalhaEnvioEmailException;
+import carshub.com.br.backend.exceptions.TempoLimiteEnvioEmailException;
+import jakarta.mail.AuthenticationFailedException;
+import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.MailAuthenticationException;
+import org.springframework.mail.MailSendException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+
+import java.net.SocketTimeoutException;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.Set;
 
 @Service
 public class EmailService {
 
     private final JavaMailSender remetenteEmail;
 
+    /**
+     * Endereco da conta autenticada no SMTP. O Gmail recusa o envio quando o
+     * cabecalho "From" aponta para um endereco diferente da conta autenticada,
+     * por isso ele e lido da mesma propriedade usada na autenticacao.
+     */
+    @Value("${spring.mail.username}")
+    private String enderecoRemetente;
+
     // Template base unificado - Escapamos os simbolos '%' do CSS com '%%' para usar o String.format
-    private static final String TEMPLATE_HTML_BASE = """
+    private static final String templateHtmlBase = """
             <!DOCTYPE html>
             <html lang="pt-BR">
             <head>
@@ -136,6 +158,11 @@ public class EmailService {
 
     /**
      * Metodo central que insere os textos dinamicamente no template base.
+     *
+     * Toda falha de SMTP e traduzida para uma excecao de dominio especifica:
+     *   - credencial recusada  -> AutenticacaoEnvioEmailException (HTTP 502)
+     *   - tempo limite excedido -> TempoLimiteEnvioEmailException  (HTTP 504)
+     *   - qualquer outro erro   -> FalhaEnvioEmailException        (HTTP 503)
      */
     private void enviarEmailGenerico(String destinatario, String assunto, String tituloPagina,
                                      String icone, String tituloPrincipal, String textoCorpo,
@@ -144,20 +171,89 @@ public class EmailService {
             MimeMessage mensagemMime = remetenteEmail.createMimeMessage();
             MimeMessageHelper auxiliar = new MimeMessageHelper(mensagemMime, "utf-8");
 
-            // Injeta as variaveis na ordem exata usando String.format
-            String htmlFinal = String.format(TEMPLATE_HTML_BASE,
+            String htmlFinal = String.format(templateHtmlBase,
                     tituloPagina, icone, tituloPrincipal, textoCorpo, codigo, textoExpiracao, textoAviso);
 
             auxiliar.setText(htmlFinal, true);
             auxiliar.setTo(destinatario);
             auxiliar.setSubject(assunto);
-            auxiliar.setFrom("CarsHub <noreply@carshub.com.br>");
+            auxiliar.setFrom("CarsHub <" + enderecoRemetente + ">");
 
             remetenteEmail.send(mensagemMime);
 
         } catch (Exception erro) {
-            throw new RuntimeException("Erro ao enviar e-mail HTML: " + erro.getMessage());
+            throw traduzirFalhaDeEnvio(destinatario, erro);
         }
+    }
+
+    private FalhaEnvioEmailException traduzirFalhaDeEnvio(String destinatario, Exception erro) {
+        if (ocorreuAutenticacaoRecusada(erro)) {
+            return new AutenticacaoEnvioEmailException(
+                    "O servidor de e-mail recusou a autenticação. "
+                            + "Verifique o usuário e a senha de app configurados no servidor.", erro);
+        }
+
+        if (ocorreuTempoLimite(erro)) {
+            return new TempoLimiteEnvioEmailException(
+                    "O servidor de e-mail não respondeu dentro do tempo limite configurado.", erro);
+        }
+
+        return new FalhaEnvioEmailException(
+                "Falha ao enviar e-mail para " + destinatario + ": " + erro.getMessage(), erro);
+    }
+
+    /**
+     * Autenticacao recusada vem como MailAuthenticationException (Spring) ou
+     * AuthenticationFailedException (Jakarta Mail) dentro da cadeia de causas.
+     */
+    private boolean ocorreuAutenticacaoRecusada(Throwable erro) {
+        return contemCausa(erro, MailAuthenticationException.class, AuthenticationFailedException.class);
+    }
+
+    /**
+     * Timeout vem como SocketTimeoutException. Isso cobre os tres timeouts
+     * configurados: connectiontimeout, timeout (leitura) e writetimeout.
+     *
+     * Nao existe classe dedicada a falha de conexao no Spring 6+:
+     * MailConnectException foi removida e esses erros chegam como MailSendException.
+     */
+    private boolean ocorreuTempoLimite(Throwable erro) {
+        return contemCausa(erro, SocketTimeoutException.class);
+    }
+
+    /**
+     * Percorre toda a arvore de causas do erro, cobrindo os tres caminhos pelos
+     * quais o Spring Mail e o Jakarta Mail encadeiam a falha original:
+     * getCause(), MessagingException.getNextException() e o mapa de mensagens
+     * que falharam em MailSendException.
+     */
+    private boolean contemCausa(Throwable erro, Class<?>... tipos) {
+        Set<Throwable> visitados = new HashSet<>();
+        Deque<Throwable> pendentes = new ArrayDeque<>();
+        pendentes.add(erro);
+
+        while (!pendentes.isEmpty()) {
+            Throwable atual = pendentes.poll();
+            if (atual == null || !visitados.add(atual)) {
+                continue;
+            }
+
+            for (Class<?> tipo : tipos) {
+                if (tipo.isInstance(atual)) {
+                    return true;
+                }
+            }
+
+            if (atual instanceof MailSendException falhaDeEnvio) {
+                pendentes.addAll(falhaDeEnvio.getFailedMessages().values());
+            }
+            if (atual instanceof MessagingException mensagem) {
+                pendentes.add(mensagem.getNextException());
+            }
+            pendentes.add(atual.getCause());
+        }
+
+        return false;
     }
 
     // 1. Criacao de conta

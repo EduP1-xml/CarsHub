@@ -9,19 +9,22 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    username: danzinxeats@gmail.com
-    password: mhcz bfde hmfx cnbi
+    username: plataformacarshub@gmail.com
+    password: lqjgcrvwdwoziphs
     properties:
       mail:
         smtp:
           auth: true
           starttls:
             enable: true
+          connectiontimeout: 3000
+          timeout: 3000
+          writetimeout: 2000
 
   datasource:
-    url: jdbc:mysql://localhost:3306/carshub
+    url: jdbc:mysql://localhost:3307/carshub
     username: root
-    password: "@BMW_e36+XT660"
+    password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -31,7 +34,6 @@ spring:
     properties:
       hibernate:
         format_sql: true
-        dialect: org.hibernate.dialect.MySQLDialect
 
 app:
   upload:

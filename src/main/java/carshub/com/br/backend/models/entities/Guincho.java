@@ -18,9 +18,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class Guincho extends PrestadorServico {
 
-    @NotBlank(message = "A placa do guincho é obrigatória")
-    @Pattern(regexp = "^[A-Za-z0-9]{7}$", message = "A placa deve conter exatamente 7 caracteres alfanuméricos")
-    @Column(name = "placa_Guincho", length = 7, unique = true, nullable = false)
+    @Column(name = "placa_Guincho", length = 7, unique = true)
     private String placa;
 
     @Column(name = "latitude_Guincho")

@@ -18,9 +18,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public abstract class PrestadorServico extends Usuario{
 
-    @NotBlank(message = "O CNPJ é obrigatório para prestadores de serviço")
-    @Pattern(regexp = "\\d{14}", message = "O CNPJ deve conter exatamente 14 dígitos numéricos")
-    @Column(name = "cnpj_PrestadorServico", length = 14, unique = true, nullable = false)
+    @Column(name = "cnpj_PrestadorServico", length = 14, unique = true)
     private String cnpj;
 
     @NotNull(message = "O tipo de prestador é obrigatório")

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.regex.Pattern;
 
 @RequiredArgsConstructor
+@Service
 public class CredencialService {
 
     private static final String SENHA_REGEX =
