@@ -75,7 +75,10 @@ public class Usuario implements UserDetails {
     @Column(name = "urlFotoPerfil_Usuario")
     private String urlFotoPerfil;
 
-    // --- Codigo de ativacao de conta ---
+    // ==================================================================
+    // Codigo de ativacao de conta (cadastro)
+    // ==================================================================
+
     @JsonIgnore
     @Column(name = "codigoVerificacao_Usuario")
     private String codigoVerificacao;
@@ -84,9 +87,14 @@ public class Usuario implements UserDetails {
     @Column(name = "expiracaoCodigoVerificacao_Usuario")
     private LocalDateTime expiracaoCodigoVerificacao;
 
+    /** Momento do ultimo envio do codigo de ativacao (cooldown de 60 segundos). */
     @JsonIgnore
     @Column(name = "dataEnvioCodigoVerificacao_Usuario")
     private LocalDateTime dataEnvioCodigoVerificacao;
+
+    // ==================================================================
+    // Codigo de troca de senha (compartilhado pelos dois fluxos)
+    // ==================================================================
 
     @JsonIgnore
     @Column(name = "codigoRedefinicaoSenha_Usuario")
@@ -95,6 +103,22 @@ public class Usuario implements UserDetails {
     @JsonIgnore
     @Column(name = "expiracaoCodigoRedefinicaoSenha_Usuario")
     private LocalDateTime expiracaoCodigoRedefinicaoSenha;
+
+    /**
+     * Ultimo envio no fluxo LOGADO (usuario autenticado pedindo troca de senha).
+     * Cooldown de 60 segundos.
+     */
+    @JsonIgnore
+    @Column(name = "dataEnvioCodigoAlteracaoSenha_Usuario")
+    private LocalDateTime dataEnvioCodigoAlteracaoSenha;
+
+    /**
+     * Ultimo envio no fluxo DESLOGADO ("esqueci minha senha").
+     * Cooldown de 24 horas.
+     */
+    @JsonIgnore
+    @Column(name = "dataEnvioCodigoRedefinicaoSenha_Usuario")
+    private LocalDateTime dataEnvioCodigoRedefinicaoSenha;
 
     @Override
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
