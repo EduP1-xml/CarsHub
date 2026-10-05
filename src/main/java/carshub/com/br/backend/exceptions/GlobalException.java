@@ -260,6 +260,49 @@ public class GlobalException {
     }
 
     // ==================================================================
+    // 502 - CHAVE DA API DE GEOCODIFICACAO RECUSADA OU AUSENTE
+    // ==================================================================
+
+    /**
+     * O servico de mapas respondeu, mas recusou a chave apresentada (ou ela nem
+     * foi configurada). E erro de configuracao do servidor, nao do cliente.
+     */
+    @ExceptionHandler(ChaveGeocodificacaoException.class)
+    public ResponseEntity<String> chaveGeocodificacao(ChaveGeocodificacaoException ex) {
+        log.error("Chave da API de geocodificação recusada ou ausente: ", ex);
+
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body("O serviço de mapas recusou a chave de API. "
+                        + "A configuração precisa ser corrigida pelo administrador.");
+    }
+
+    // ==================================================================
+    // 504 - TEMPO LIMITE DA API DE GEOCODIFICACAO
+    // ==================================================================
+
+    @ExceptionHandler(TempoLimiteGeocodificacaoException.class)
+    public ResponseEntity<String> tempoLimiteGeocodificacao(TempoLimiteGeocodificacaoException ex) {
+        log.error("Tempo limite excedido na geocodificação: ", ex);
+
+        return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT)
+                .body("O serviço de mapas demorou demais para responder. "
+                        + "Tente novamente ou envie latitude e longitude do GPS.");
+    }
+
+    // ==================================================================
+    // 503 - FALHA GENERICA NA API DE GEOCODIFICACAO
+    // ==================================================================
+
+    @ExceptionHandler(FalhaGeocodificacaoException.class)
+    public ResponseEntity<String> falhaGeocodificacao(FalhaGeocodificacaoException ex) {
+        log.error("Falha na geocodificação: ", ex);
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body("Não foi possível localizar o endereço no momento. "
+                        + "Tente novamente ou envie latitude e longitude do GPS.");
+    }
+
+    // ==================================================================
     // 500 - FALHA INESPERADA DO SERVIDOR
     // ==================================================================
 

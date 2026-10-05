@@ -1,6 +1,7 @@
 package carshub.com.br.backend.controllers;
 
 import carshub.com.br.backend.models.dtos.AlteracaoSenhaDTO;
+import carshub.com.br.backend.models.dtos.LatitudeLongitudeDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilMecanicoPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilMecanicoPutDTO;
 import carshub.com.br.backend.services.MecanicoService;
@@ -38,6 +39,15 @@ public class MecanicoController {
 
         servicoMecanico.atualizarPerfilCondicional(id, dados);
         return ResponseEntity.ok("Perfil do mecânico modificado parcialmente com sucesso.");
+    }
+
+    @PutMapping("/localizacao")
+    public ResponseEntity<Void> atualizarLocalizacao(
+            @RequestHeader("user-id") UUID id,
+            @RequestBody LatitudeLongitudeDTO dados) {
+
+        servicoMecanico.atualizarLocalizacao(id, dados);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/foto-perfil")

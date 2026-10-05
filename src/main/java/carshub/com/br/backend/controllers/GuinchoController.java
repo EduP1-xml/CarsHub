@@ -1,6 +1,7 @@
 package carshub.com.br.backend.controllers;
 
 import carshub.com.br.backend.models.dtos.AlteracaoSenhaDTO;
+import carshub.com.br.backend.models.dtos.LatitudeLongitudeDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilGuinchoPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilGuinchoPutDTO;
 import carshub.com.br.backend.services.GuinchoService;
@@ -38,6 +39,15 @@ public class GuinchoController {
 
         servicoGuincho.atualizarPerfilCondicional(id, dados);
         return ResponseEntity.ok("Perfil do guincho modificado parcialmente com sucesso.");
+    }
+
+    @PutMapping("/localizacao")
+    public ResponseEntity<Void> atualizarLocalizacao(
+            @RequestHeader("user-id") UUID id,
+            @RequestBody LatitudeLongitudeDTO dados) {
+
+        servicoGuincho.atualizarLocalizacao(id, dados);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/foto-perfil")

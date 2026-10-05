@@ -7,13 +7,16 @@ import carshub.com.br.backend.models.dtos.eventos.EventoPatchDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoPutDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRegistroDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRespostaDTO;
+import carshub.com.br.backend.models.dtos.geocodificacao.LocalizacaoGeocodificadaDTO;
 import carshub.com.br.backend.models.entities.Evento;
 import carshub.com.br.backend.models.entities.OrganizadorEvento;
 import carshub.com.br.backend.models.enums.eventos.StatusEvento;
 import carshub.com.br.backend.repositories.EventoRepository;
 import carshub.com.br.backend.repositories.OrganizadorEventoRepository;
 import carshub.com.br.backend.services.file.FileStorageService;
+import carshub.com.br.backend.services.geocodificacao.GeocodificacaoService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -24,13 +27,27 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * CRUD do evento pelo organizador.
+ *
+ * GEOLOCALIZACAO: o endereco do evento e SEMPRE digitado a mao (rua/numero/bairro),
+ * entao as coordenadas do pino no mapa vem da Geocoding API (chamada do BACK).
+ * A geocodificacao roda no create, no PUT e no PATCH quando o endereco muda; ela e
+ * BLOQUEANTE de proposito: sem coordenada o evento nao teria pino, que e requisito
+ * do produto. Falha de endereco -> 422; falha do servico de mapas -> 502/503/504.
+ *
+ * A chamada acontece ANTES de gravar qualquer coisa e antes do upload das fotos,
+ * para nao deixar arquivo orfao no disco quando o endereco nao for resolvido.
+ */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EventoService {
 
     private final EventoRepository repositorioEvento;
     private final OrganizadorEventoRepository repositorioOrganizador;
     private final FileStorageService servicoArmazenamentoArquivo;
+    private final GeocodificacaoService servicoGeocodificacao;
 
     @Transactional
     public EventoRespostaDTO criarEvento(EventoRegistroDTO dados, List<MultipartFile> arquivos, UUID idOrganizador) {
@@ -46,6 +63,9 @@ public class EventoService {
         Evento evento = new Evento();
         mapearRegistroDtoParaEntidade(evento, dados);
         evento.setOrganizadorEvento(organizador);
+
+        // Antes do upload: se o endereco nao for resolvido, nenhum arquivo fica no disco.
+        preencherCoordenadasDoEvento(evento);
 
         List<String> urlsFotos = new ArrayList<>();
         if (arquivos != null && !arquivos.isEmpty()) {
@@ -89,6 +109,10 @@ public class EventoService {
         }
 
         mapearPutDtoParaEntidade(evento, dados);
+
+        // O PUT substitui o endereco inteiro: as coordenadas sao recalculadas sempre.
+        preencherCoordenadasDoEvento(evento);
+
         Evento eventoAtualizado = repositorioEvento.save(evento);
 
         return mapearEntidadeParaResponse(eventoAtualizado);
@@ -113,16 +137,34 @@ public class EventoService {
             evento.setDataHoraInicio(dados.dataHoraInicio());
         }
 
+        // Só regeocodifica quando algum campo do ENDERECO realmente mudou: assim um
+        // PATCH que mexe apenas no preco nao gasta cota nem depende do Google.
+        boolean enderecoAlterado = false;
+
+        if (dados.rua() != null && !dados.rua().isBlank()) {
+            enderecoAlterado = enderecoAlterado || !dados.rua().equals(evento.getRua());
+            evento.setRua(dados.rua());
+        }
+        if (dados.numero() != null && !dados.numero().isBlank()) {
+            enderecoAlterado = enderecoAlterado || !dados.numero().equals(evento.getNumero());
+            evento.setNumero(dados.numero());
+        }
+        if (dados.bairro() != null && !dados.bairro().isBlank()) {
+            enderecoAlterado = enderecoAlterado || !dados.bairro().equals(evento.getBairro());
+            evento.setBairro(dados.bairro());
+        }
+
         if (dados.nome() != null && !dados.nome().isBlank()) evento.setNome(dados.nome());
         if (dados.descricao() != null && !dados.descricao().isBlank()) evento.setDescricao(dados.descricao());
         if (dados.preco() != null) evento.setPreco(dados.preco());
         if (dados.limiteParticipantes() != null) evento.setLimiteParticipantes(dados.limiteParticipantes());
-        if (dados.rua() != null && !dados.rua().isBlank()) evento.setRua(dados.rua());
-        if (dados.numero() != null && !dados.numero().isBlank()) evento.setNumero(dados.numero());
         if (dados.complemento() != null) evento.setComplemento(dados.complemento());
-        if (dados.bairro() != null && !dados.bairro().isBlank()) evento.setBairro(dados.bairro());
         if (dados.dataHoraFim() != null) evento.setDataHoraFim(dados.dataHoraFim());
         if (dados.urlFotoEvento() != null) evento.setUrlFotoEvento(dados.urlFotoEvento());
+
+        if (enderecoAlterado) {
+            preencherCoordenadasDoEvento(evento);
+        }
 
         Evento eventoAtualizado = repositorioEvento.save(evento);
         return mapearEntidadeParaResponse(eventoAtualizado);
@@ -142,6 +184,44 @@ public class EventoService {
     public void excluirEvento(UUID idEvento, UUID idOrganizador) {
         Evento evento = verificarPropriedadeDoEvento(idEvento, idOrganizador);
         repositorioEvento.delete(evento);
+    }
+
+    // ========================================================
+    // GEOLOCALIZACAO
+    // ========================================================
+
+    /**
+     * Traduz o endereco digitado pelo organizador em coordenadas para o pino do mapa.
+     *
+     * BLOQUEANTE: endereco nao encontrado -> EnderecoNaoEncontradoException (422);
+     * servico de mapas fora/timeout/sem chave -> 503/504/502. Se voce preferir que o
+     * evento seja salvo mesmo sem pino, envolva o corpo num try/catch e logue WARN
+     * (as coordenadas ficam nulas e o evento aparece sem marcador ate ser editado).
+     */
+    private void preencherCoordenadasDoEvento(Evento evento) {
+        String enderecoCompleto = montarEnderecoDoEvento(evento);
+
+        LocalizacaoGeocodificadaDTO localizacao = servicoGeocodificacao.geocodificarEndereco(enderecoCompleto);
+
+        evento.setLatitude(localizacao.latitude());
+        evento.setLongitude(localizacao.longitude());
+
+        log.info("Evento '{}' geocodificado: {} -> ({}, {})",
+                evento.getNome(), enderecoCompleto, localizacao.latitude(), localizacao.longitude());
+    }
+
+    /** O complemento fica de fora: "Apto 12" piora a precisao do geocodificador. */
+    private String montarEnderecoDoEvento(Evento evento) {
+        StringBuilder endereco = new StringBuilder()
+                .append(evento.getRua())
+                .append(", ")
+                .append(evento.getNumero());
+
+        if (evento.getBairro() != null && !evento.getBairro().isBlank()) {
+            endereco.append(" - ").append(evento.getBairro());
+        }
+
+        return endereco.toString();
     }
 
     // ========================================================
@@ -204,6 +284,8 @@ public class EventoService {
                 evento.getNumero(),
                 evento.getComplemento(),
                 evento.getBairro(),
+                evento.getLatitude(),
+                evento.getLongitude(),
                 evento.getStatus(),
                 evento.getOrganizadorEvento().getNome(),
                 evento.getDataHoraInicio(),

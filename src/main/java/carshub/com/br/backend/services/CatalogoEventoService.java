@@ -55,6 +55,8 @@ public class CatalogoEventoService {
                 evento.getRua(),
                 evento.getNumero(),
                 evento.getBairro(),
+                evento.getLatitude(),
+                evento.getLongitude(),
                 evento.getOrganizadorEvento().getNome(),
                 vagasDisponiveis,
                 isInscrito,

@@ -3,6 +3,7 @@ package carshub.com.br.backend.services;
 import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.models.dtos.AlteracaoSenhaDTO;
+import carshub.com.br.backend.models.dtos.LatitudeLongitudeDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilMecanicoPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilMecanicoPutDTO;
 import carshub.com.br.backend.models.entities.Mecanico;
@@ -43,6 +44,20 @@ public class MecanicoService {
         if (dados.servicosOfertados() != null && !dados.servicosOfertados().isEmpty()) {
             mecanico.setServicos(dados.servicosOfertados());
         }
+
+        return repositorioPrestadorServico.save(mecanico);
+    }
+
+    @Transactional
+    public Mecanico atualizarLocalizacao(UUID id, LatitudeLongitudeDTO dados) {
+        Mecanico mecanico = buscarEValidarMecanico(id);
+
+        if (dados.latitude() == null || dados.longitude() == null) {
+            throw new IllegalArgumentException("Informe latitude e longitude para atualizar a localização.");
+        }
+
+        mecanico.setLatitude(dados.latitude());
+        mecanico.setLongitude(dados.longitude());
 
         return repositorioPrestadorServico.save(mecanico);
     }

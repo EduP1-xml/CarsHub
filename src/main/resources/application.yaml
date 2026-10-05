@@ -38,6 +38,15 @@ spring:
 app:
   upload:
     dir: ${APP_UPLOAD_DIR:uploads}
+  servicos:
+    # Tempo maximo, em minutos, que uma proposta espera resposta do colecionador
+    minutosExpiracaoProposta: ${MINUTOS_EXPIRACAO_PROPOSTA:30}
+  geocodificacao:
+    # Google Geocoding API. A chave fica SO no back: o front recebe apenas as coordenadas e o endereco ja formatado, nunca a credencial, que ainda tenho q colocar.
+    urlBase: ${GEOCODIFICACAO_URL_BASE:https://maps.googleapis.com/maps/api/geocode/json}
+    chave: ${GOOGLE_MAPS_API_KEY:}
+    tempoLimiteConexaoMs: ${GEOCODIFICACAO_TEMPO_LIMITE_CONEXAO_MS:3000}
+    tempoLimiteLeituraMs: ${GEOCODIFICACAO_TEMPO_LIMITE_LEITURA_MS:3000}
 
 frontend:
   url: ${FRONTEND_URL:http://localhost:5173}

@@ -12,6 +12,8 @@ public record CatalogoEventoResponseDTO(
         String rua,
         String numero,
         String bairro,
+        Double latitude,
+        Double longitude,
         String nomeOrganizador,
         Integer vagasDisponiveis,
         Boolean inscrito,

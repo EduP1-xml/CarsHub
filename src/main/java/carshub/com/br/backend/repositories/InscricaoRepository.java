@@ -19,9 +19,10 @@ public interface InscricaoRepository extends JpaRepository<Inscricao, UUID> {
     // Lista todas as inscrições de um usuário específico
     List<Inscricao> findAllByEntusiasta_Id(UUID idEntusiasta);
 
-    // Soma todas as inscrições CONFIRMADAS de todos os eventos pertencentes a um organizador específico
-    @Query("SELECT COUNT(i) FROM Inscricao i WHERE i.evento.organizadorEvento.id = :idOrganizador AND i.status = 'CONFIRMADA'")
-    Integer countTotalParticipantesByOrganizador(@Param("idOrganizador") UUID idOrganizador);
+    // Soma todas as inscrições CONFIRMADAS de todos os eventos de um organizador
+    @Query("SELECT COUNT(i) FROM Inscricao i WHERE i.evento.organizadorEvento.id = :idOrganizador AND i.status = :status")
+    Integer countTotalParticipantesByOrganizador(@Param("idOrganizador") UUID idOrganizador,
+                                                 @Param("status") StatusInscricao status);
 
     // Ajuda a montar o histórico: Conta os participantes de um evento específico que já foi concluído
     int countByEvento_Id(UUID id);

@@ -15,6 +15,8 @@ public record EventoRespostaDTO(
         String numero,
         String complemento,
         String bairro,
+        Double latitude,
+        Double longitude,
         StatusEvento status,
         String nomeOrganizador,
         LocalDateTime dataHoraInicio,

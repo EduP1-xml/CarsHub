@@ -3,6 +3,7 @@ package carshub.com.br.backend.services;
 import carshub.com.br.backend.exceptions.PlacaJaCadastradaException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.models.dtos.AlteracaoSenhaDTO;
+import carshub.com.br.backend.models.dtos.LatitudeLongitudeDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilGuinchoPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilGuinchoPutDTO;
 import carshub.com.br.backend.models.entities.Guincho;
@@ -45,6 +46,20 @@ public class GuinchoService {
             validarDuplicidadePlaca(dados.placa(), guincho.getPlaca());
             guincho.setPlaca(dados.placa());
         }
+
+        return repositorioGuincho.save(guincho);
+    }
+
+    @Transactional
+    public Guincho atualizarLocalizacao(UUID id, LatitudeLongitudeDTO dados) {
+        Guincho guincho = buscarGuinchoOuLancarExcecao(id);
+
+        if (dados.latitude() == null || dados.longitude() == null) {
+            throw new IllegalArgumentException("Informe latitude e longitude para atualizar a localização.");
+        }
+
+        guincho.setLatitude(dados.latitude());
+        guincho.setLongitude(dados.longitude());
 
         return repositorioGuincho.save(guincho);
     }

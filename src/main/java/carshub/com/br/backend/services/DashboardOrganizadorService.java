@@ -5,6 +5,7 @@ import carshub.com.br.backend.models.dtos.dashboards.DashboardMetricasResponseDT
 import carshub.com.br.backend.models.dtos.dashboards.HistoricoEventoResponseDTO;
 import carshub.com.br.backend.models.entities.Evento;
 import carshub.com.br.backend.models.enums.eventos.StatusEvento;
+import carshub.com.br.backend.models.enums.inscricoes.StatusInscricao;
 import carshub.com.br.backend.repositories.EventoRepository;
 import carshub.com.br.backend.repositories.InscricaoRepository;
 import carshub.com.br.backend.repositories.OrganizadorEventoRepository;
@@ -32,10 +33,7 @@ public class DashboardOrganizadorService {
 
         int totalEventos = eventoRepository.countByOrganizadorEvento_Id(organizadorId);
         
-        Integer totalParticipantes = inscricaoRepository.countTotalParticipantesByOrganizador(organizadorId);
-        if (totalParticipantes == null) {
-            totalParticipantes = 0; // Proteção contra nulos caso o organizador nunca tenha tido inscritos
-        }
+        Integer totalParticipantes = inscricaoRepository.countTotalParticipantesByOrganizador(organizadorId, StatusInscricao.CONFIRMADA);
 
         return new DashboardMetricasResponseDTO(totalEventos, totalParticipantes);
     }
