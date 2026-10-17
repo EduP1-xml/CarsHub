@@ -3,6 +3,7 @@ package carshub.com.br.backend.repositories.servicos;
 import carshub.com.br.backend.models.entities.Guincho;
 import carshub.com.br.backend.models.entities.servicos.ServicoGuincho;
 import carshub.com.br.backend.models.enums.servicos.StatusServico;
+import carshub.com.br.backend.utils.DistanciaGeografica;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -10,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,33 +29,35 @@ public interface ServicoGuinchoRepository extends JpaRepository<ServicoGuincho, 
 
     List<ServicoGuincho> findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(UUID idCarro, StatusServico status);
 
-    /**
-     * Painel do guincho: chamados SOLICITADO dentro do bounding box do raio, com
-     * a distancia (Haversine, km) calculada uma unica vez no SELECT.
-     * Ver ServicoMecanicoRepository para a explicacao do least(1.0, ...).
-     */
-    @Query("""
-            SELECT s,
-                   (6371 * acos(least(1.0,
-                        cos(function('radians', :latitude)) * cos(function('radians', s.latitudeAtualEntusiasta))
-                            * cos(function('radians', s.longitudeAtualEntusiasta) - function('radians', :longitude))
-                        + sin(function('radians', :latitude)) * sin(function('radians', s.latitudeAtualEntusiasta))
-                   )))
-              FROM ServicoGuincho s
-             WHERE s.status = :statusSolicitado
-               AND s.latitudeAtualEntusiasta BETWEEN :latitudeMinima AND :latitudeMaxima
-               AND s.longitudeAtualEntusiasta BETWEEN :longitudeMinima AND :longitudeMaxima
-            """)
-    List<Object[]> buscarDisponiveisNaRegiao(@Param("latitude") Double latitude,
-                                             @Param("longitude") Double longitude,
-                                             @Param("latitudeMinima") Double latitudeMinima,
-                                             @Param("latitudeMaxima") Double latitudeMaxima,
-                                             @Param("longitudeMinima") Double longitudeMinima,
-                                             @Param("longitudeMaxima") Double longitudeMaxima,
-                                             @Param("statusSolicitado") StatusServico statusSolicitado);
+    List<ServicoGuincho> findAllByStatusAndDataHoraSolicitacaoBefore(StatusServico status, LocalDateTime limite);
 
+    long countByGuincho_IdAndStatusIn(UUID idGuincho, Collection<StatusServico> status);
+
+    boolean existsByChaveIdempotencia(String chaveIdempotencia);
+
+    /** API TIPADA do painel do guincho (enum + caixa de coordenadas). */
+    default List<UUID> buscarIdsDisponiveisNaRegiao(StatusServico status,
+                                                    DistanciaGeografica.CaixaCoordenadas caixa) {
+        return buscarIdsDisponiveisNaRegiaoNativo(status.name(), DistanciaGeografica.envelopeWkt(caixa))
+                .stream()
+                .map(UUID::fromString)
+                .toList();
+    }
+
+    @Query(value = """
+            SELECT BIN_TO_UUID(s.id_ServicoGuincho)
+              FROM ServicoGuincho s
+             WHERE s.status_ServicoGuincho = :status
+               AND ST_Within(s.localizacao_ServicoGuincho, ST_GeomFromText(:envelope))
+            """, nativeQuery = true)
+    List<String> buscarIdsDisponiveisNaRegiaoNativo(@Param("status") String status,
+                                                    @Param("envelope") String envelope);
+
+    /** Busca tipada das entidades dos IDs que vieram da consulta espacial. */
+    @Query("SELECT s FROM ServicoGuincho s WHERE s.id IN (:ids)")
+    List<ServicoGuincho> buscarPorIds(@Param("ids") Collection<UUID> ids);
     // ==================================================================
-    // TRANSICOES DE ESTADO (guardas identicas as do servico mecanico)
+    // TRANSICOES CRITICAS (guardas atomicas)
     // ==================================================================
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
@@ -77,6 +81,7 @@ public interface ServicoGuinchoRepository extends JpaRepository<ServicoGuincho, 
                           @Param("statusNovo") StatusServico statusNovo,
                           @Param("statusEsperado") StatusServico statusEsperado);
 
+    /** Rejeicao ou expiracao: volta para a rede zerando prestador, valor e GPS DO GUINCHO. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE ServicoGuincho s
@@ -93,54 +98,77 @@ public interface ServicoGuinchoRepository extends JpaRepository<ServicoGuincho, 
                          @Param("statusNovo") StatusServico statusNovo,
                          @Param("statusEsperado") StatusServico statusEsperado);
 
+    /**
+     * Libera de uma vez TODAS as propostas abertas do guincho (usado quando ele
+     * atinge a cota de 2 servicos ativos).
+     */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE ServicoGuincho s
-               SET s.status = :statusNovo
-             WHERE s.id = :idServico
+               SET s.guincho = null,
+                   s.valorProposto = null,
+                   s.latitudeAtualGuincho = null,
+                   s.longitudeAtualGuincho = null,
+                   s.dataHoraProposta = null,
+                   s.status = :statusNovo
+             WHERE s.guincho = :guincho
                AND s.status = :statusEsperado
             """)
-    int alterarStatus(@Param("idServico") UUID idServico,
-                      @Param("statusNovo") StatusServico statusNovo,
-                      @Param("statusEsperado") StatusServico statusEsperado);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("""
-            UPDATE ServicoGuincho s
-               SET s.confirmacaoConclusaoEntusiasta = true
-             WHERE s.id = :idServico
-               AND s.status = :statusEsperado
-               AND s.confirmacaoConclusaoEntusiasta = false
-            """)
-    int confirmarConclusaoEntusiasta(@Param("idServico") UUID idServico,
-                                     @Param("statusEsperado") StatusServico statusEsperado);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("""
-            UPDATE ServicoGuincho s
-               SET s.confirmacaoConclusaoGuincho = true
-             WHERE s.id = :idServico
-               AND s.status = :statusEsperado
-               AND s.confirmacaoConclusaoGuincho = false
-            """)
-    int confirmarConclusaoGuincho(@Param("idServico") UUID idServico,
+    int liberarPropostasDoGuincho(@Param("guincho") Guincho guincho,
+                                  @Param("statusNovo") StatusServico statusNovo,
                                   @Param("statusEsperado") StatusServico statusEsperado);
 
+    /** Aceite: PROPOSTA -> PENDENTE gravando a data que libera o cancelamento em 2 h. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ServicoGuincho s
+               SET s.status = :statusNovo,
+                   s.dataHoraPendente = :dataHoraPendente
+             WHERE s.id = :idServico
+               AND s.status = :statusEsperado
+            """)
+    int aceitarProposta(@Param("idServico") UUID idServico,
+                        @Param("dataHoraPendente") LocalDateTime dataHoraPendente,
+                        @Param("statusNovo") StatusServico statusNovo,
+                        @Param("statusEsperado") StatusServico statusEsperado);
+
+    /** CHEGADA: PENDENTE -> CHEGOU quando as DUAS confirmacoes ja estao gravadas. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ServicoGuincho s
+               SET s.status = :statusChegou,
+                   s.dataHoraChegou = :dataHoraChegou
+             WHERE s.id = :idServico
+               AND s.status = :statusPendente
+               AND s.confirmacaoChegadaEntusiasta = true
+               AND s.confirmacaoChegadaGuincho = true
+            """)
+    int marcarChegou(@Param("idServico") UUID idServico,
+                     @Param("dataHoraChegou") LocalDateTime dataHoraChegou,
+                     @Param("statusChegou") StatusServico statusChegou,
+                     @Param("statusPendente") StatusServico statusPendente);
+
+    /**
+     * FINALIZACAO: CHEGOU -> FINALIZADO com as duas confirmacoes de conclusao.
+     * Zera a chave de idempotencia, liberando uma nova solicitacao igual.
+     */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE ServicoGuincho s
                SET s.status = :statusFinalizado,
-                   s.dataHoraFinalizacao = :dataHoraFinalizacao
+                   s.dataHoraFinalizacao = :dataHoraFinalizacao,
+                   s.chaveIdempotencia = null
              WHERE s.id = :idServico
-               AND s.status = :statusPendente
+               AND s.status = :statusChegou
                AND s.confirmacaoConclusaoEntusiasta = true
                AND s.confirmacaoConclusaoGuincho = true
             """)
     int finalizarSeAmbosConfirmaram(@Param("idServico") UUID idServico,
                                     @Param("dataHoraFinalizacao") LocalDateTime dataHoraFinalizacao,
                                     @Param("statusFinalizado") StatusServico statusFinalizado,
-                                    @Param("statusPendente") StatusServico statusPendente);
+                                    @Param("statusChegou") StatusServico statusChegou);
 
+    /** Usado pela PropostaExpiradaTask (30 minutos sem resposta). */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE ServicoGuincho s

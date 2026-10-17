@@ -10,6 +10,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "Guincho")
 @PrimaryKeyJoinColumn(name = "id_Guincho")
@@ -26,4 +28,8 @@ public class Guincho extends PrestadorServico {
 
     @Column(name = "longitude_Guincho")
     private Double longitude;
+
+    /** Ultima proposta enviada por este guincho (cooldown de 1 minuto). */
+    @Column(name = "dataHoraUltimaProposta_Guincho")
+    private LocalDateTime dataHoraUltimaProposta;
 }

@@ -8,7 +8,16 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
-//Telefone só é preenchido quando a proposta é aceita
+
+/**
+ * Visao completa de uma solicitacao, usada pelo colecionador e pelo prestador.
+ *
+ * PRIVACIDADE: os telefones so sao preenchidos a partir de PENDENTE.
+ *
+ * quantidadeMecanicosElegiveis: quantos mecanicos ativos ofertam TODOS os servicos
+ * (resolvido na criacao). Zero significa "ninguem compativel agora" e o app pode
+ * avisar o colecionador. No guincho vem null (nao ha catalogo de servicos).
+ */
 public record ServicoRespostaDTO(
         UUID idServico,
         TipoServico tipoServico,
@@ -26,18 +35,38 @@ public record ServicoRespostaDTO(
         UUID idCarro,
         String carroDescricao,
         List<ServicosOfertados> servicosSolicitados,
+        Integer quantidadeMecanicosElegiveis,
 
         Double latitudeEntusiasta,
         Double longitudeEntusiasta,
         String enderecoOcorrencia,
+        EnderecoOcorrenciaDTO enderecoEstruturado,
 
         Double latitudePrestador,
         Double longitudePrestador,
+
+        String urlFotoInicial,
+
+        Boolean confirmacaoChegadaEntusiasta,
+        Boolean confirmacaoChegadaPrestador,
+        LocalDateTime dataHoraChegou,
+
+        String urlFotoFinalEntusiasta,
+        String urlFotoFinalPrestador,
+
+        Integer notaAvaliacaoEntusiasta,
+        String comentarioAvaliacaoEntusiasta,
+        LocalDateTime dataHoraAvaliacaoEntusiasta,
+
+        Integer notaAvaliacaoPrestador,
+        String comentarioAvaliacaoPrestador,
+        LocalDateTime dataHoraAvaliacaoPrestador,
 
         Boolean confirmacaoConclusaoEntusiasta,
         Boolean confirmacaoConclusaoPrestador,
 
         LocalDateTime dataHoraSolicitacao,
         LocalDateTime dataHoraProposta,
+        LocalDateTime dataHoraPendente,
         LocalDateTime dataHoraFinalizacao
 ) {}

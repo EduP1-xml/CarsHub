@@ -10,6 +10,8 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "Entusiasta")
 @PrimaryKeyJoinColumn(name = "id_Entusiasta")
@@ -35,6 +37,10 @@ public class Entusiasta extends Usuario {
 
     @Column(name = "longitude_Entusiasta")
     private Double longitude;
+
+    /** Ultima solicitacao de servico criada por este colecionador (cooldown de 5 minutos). */
+    @Column(name = "dataHoraUltimaSolicitacaoServico_Entusiasta")
+    private LocalDateTime dataHoraUltimaSolicitacaoServico;
 
     // ========================================================
     // MÉTODOS DE REGRA DE NEGÓCIO (POO)

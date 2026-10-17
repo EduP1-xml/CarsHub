@@ -1,5 +1,7 @@
 package carshub.com.br.backend.controllers.servicos;
 
+import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
+import carshub.com.br.backend.models.dtos.servicos.AvaliacaoServicoDTO;
 import carshub.com.br.backend.models.dtos.servicos.PropostaServicoDTO;
 import carshub.com.br.backend.models.dtos.servicos.ServicoDisponivelDTO;
 import carshub.com.br.backend.models.dtos.servicos.ServicoRespostaDTO;
@@ -8,11 +10,11 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
 
-/** Painel de trabalho do guincho: chamados da regiao e negociacoes em andamento. */
 @RestController
 @RequestMapping("/api/carshub/guinchos/servicos")
 @RequiredArgsConstructor
@@ -20,25 +22,29 @@ public class PainelGuinchoController {
 
     private final ServicoGuinchoService servicoGuincho;
 
-    /**
-     * Chamados SOLICITADO na regiao, ESTRITAMENTE do mais proximo para o mais
-     * distante. Origem: latitude/longitude da query > endereco geocodificado >
-     * localizacao do perfil.
-     */
     @GetMapping("/disponiveis")
-    public ResponseEntity<List<ServicoDisponivelDTO>> listarDisponiveis(
+    public ResponseEntity<PaginaRespostaDTO<ServicoDisponivelDTO>> listarDisponiveis(
             @RequestHeader("user-id") UUID id,
             @RequestParam(name = "raioKm", required = false) Double raioKm,
             @RequestParam(name = "latitude", required = false) Double latitude,
             @RequestParam(name = "longitude", required = false) Double longitude,
-            @RequestParam(name = "endereco", required = false) String endereco) {
+            @RequestParam(name = "endereco", required = false) String endereco,
+            @RequestParam(name = "pagina", defaultValue = "0") int pagina,
+            @RequestParam(name = "tamanho", defaultValue = "20") int tamanho) {
 
-        return ResponseEntity.ok(servicoGuincho.listarServicosDisponiveis(id, raioKm, latitude, longitude, endereco));
+        List<ServicoDisponivelDTO> chamados =
+                servicoGuincho.listarServicosDisponiveis(id, raioKm, latitude, longitude, endereco);
+
+        return ResponseEntity.ok(PaginaRespostaDTO.de(chamados, pagina, tamanho));
     }
 
     @GetMapping
-    public ResponseEntity<List<ServicoRespostaDTO>> listarMinhaFilaDeTrabalho(@RequestHeader("user-id") UUID id) {
-        return ResponseEntity.ok(servicoGuincho.listarMinhaFilaDeTrabalho(id));
+    public ResponseEntity<PaginaRespostaDTO<ServicoRespostaDTO>> listarMinhaFilaDeTrabalho(
+            @RequestHeader("user-id") UUID id,
+            @RequestParam(name = "pagina", defaultValue = "0") int pagina,
+            @RequestParam(name = "tamanho", defaultValue = "20") int tamanho) {
+
+        return ResponseEntity.ok(PaginaRespostaDTO.de(servicoGuincho.listarMinhaFilaDeTrabalho(id), pagina, tamanho));
     }
 
     @GetMapping("/{idServico}")
@@ -56,6 +62,32 @@ public class PainelGuinchoController {
             @Valid @RequestBody PropostaServicoDTO dados) {
 
         return ResponseEntity.ok(servicoGuincho.enviarProposta(idServico, id, dados));
+    }
+
+    @PatchMapping("/{idServico}/confirmar-chegada")
+    public ResponseEntity<ServicoRespostaDTO> confirmarChegada(
+            @PathVariable UUID idServico,
+            @RequestHeader("user-id") UUID id) {
+
+        return ResponseEntity.ok(servicoGuincho.confirmarChegadaPeloGuincho(idServico, id));
+    }
+
+    @PostMapping("/{idServico}/foto-final")
+    public ResponseEntity<ServicoRespostaDTO> enviarFotoFinal(
+            @PathVariable UUID idServico,
+            @RequestHeader("user-id") UUID id,
+            @RequestParam("arquivo") MultipartFile arquivo) {
+
+        return ResponseEntity.ok(servicoGuincho.enviarFotoFinalPeloGuincho(idServico, id, arquivo));
+    }
+
+    @PostMapping("/{idServico}/avaliacao")
+    public ResponseEntity<ServicoRespostaDTO> avaliarColecionador(
+            @PathVariable UUID idServico,
+            @RequestHeader("user-id") UUID id,
+            @Valid @RequestBody AvaliacaoServicoDTO dados) {
+
+        return ResponseEntity.ok(servicoGuincho.avaliarColecionador(idServico, id, dados));
     }
 
     @PatchMapping("/{idServico}/confirmar-conclusao")

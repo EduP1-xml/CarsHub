@@ -3,6 +3,7 @@ package carshub.com.br.backend.repositories.servicos;
 import carshub.com.br.backend.models.entities.Mecanico;
 import carshub.com.br.backend.models.entities.servicos.ServicoMecanico;
 import carshub.com.br.backend.models.enums.servicos.StatusServico;
+import carshub.com.br.backend.utils.DistanciaGeografica;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -10,10 +11,15 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
 public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico, UUID> {
+
+    // ==================================================================
+    // LEITURAS
+    // ==================================================================
 
     List<ServicoMecanico> findAllByEntusiasta_IdOrderByDataHoraSolicitacaoDesc(UUID idEntusiasta);
 
@@ -23,46 +29,65 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
 
     List<ServicoMecanico> findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(UUID idCarro, StatusServico status);
 
+    List<ServicoMecanico> findAllByStatusAndDataHoraSolicitacaoBefore(StatusServico status, LocalDateTime limite);
+
+    /** Cota de servicos ativos do prestador (no maximo 2). */
+    long countByMecanico_IdAndStatusIn(UUID idMecanico, Collection<StatusServico> status);
+
+    boolean existsByChaveIdempotencia(String chaveIdempotencia);
+
     /**
-     * Painel do mecanico: chamados SOLICITADO dentro do bounding box do raio.
+     * API TIPADA do painel: recebe o enum de status e a caixa de coordenadas.
      *
-     * A distancia (Haversine, em km) e calculada UMA unica vez, no SELECT, e
-     * devolvida como segundo item de cada linha. O WHERE so faz o pre-filtro
-     * barato por caixa de coordenadas; o filtro exato do raio e feito em Java,
-     * junto com a ordenacao.
+     * A conversao para texto acontece AQUI, sempre a partir do proprio valor
+     * (StatusServico.name() e o WKT gerado pelo DistanciaGeografica) — nunca de um
+     * literal. Se o enum for renomeado no futuro, a compilacao aponta esta linha.
      *
-     * O least(1.0, ...) evita que o ACOS receba um valor levemente maior que 1
-     * (dois pontos praticamente no mesmo lugar), o que devolveria NULL no MySQL
-     * e sumiria com o chamado. Se o seu Hibernate nao conhecer least() em HQL,
-     * troque por function('least', 1.0, <expressao>).
+     * Motivo de o metodo anotado receber String: em consulta NATIVA o Hibernate nao
+     * tem o contexto de @Enumerated(STRING) da entidade e tende a enviar o enum como
+     * numero, e o MySQL compara coluna ENUM por POSICAO. Evitamos a questao.
+     */
+    default List<UUID> buscarIdsDisponiveisNaRegiao(StatusServico status,
+                                                    DistanciaGeografica.CaixaCoordenadas caixa) {
+        return buscarIdsDisponiveisNaRegiaoNativo(status.name(), DistanciaGeografica.envelopeWkt(caixa))
+                .stream()
+                .map(UUID::fromString)
+                .toList();
+    }
+
+    /**
+     * Candidatos do painel pelo INDICE ESPACIAL: chamados naquele status cuja
+     * localizacao esta dentro do retangulo. Devolve apenas os IDs (em texto), porque
+     * a coluna POINT nao esta mapeada na entidade.
+     */
+    @Query(value = """
+            SELECT BIN_TO_UUID(s.id_ServicoMecanico)
+              FROM ServicoMecanico s
+             WHERE s.status_ServicoMecanico = :status
+               AND ST_Within(s.localizacao_ServicoMecanico, ST_GeomFromText(:envelope))
+            """, nativeQuery = true)
+    List<String> buscarIdsDisponiveisNaRegiaoNativo(@Param("status") String status,
+                                                    @Param("envelope") String envelope);
+
+    /**
+     * Entidades dos IDs candidatos, restritas aos chamados em que o mecanico esta na
+     * lista de ELEGIVEIS.
+     *
+     * A comparacao do UUID fica aqui, em JPQL, para o Hibernate converter o
+     * identificador para BINARY(16) pelo mapeamento da entidade — em SQL nativo isso
+     * dependeria de UUID_TO_BIN e da ordem dos bytes.
      */
     @Query("""
-            SELECT s,
-                   (6371 * acos(least(1.0,
-                        cos(function('radians', :latitude)) * cos(function('radians', s.latitudeAtualEntusiasta))
-                            * cos(function('radians', s.longitudeAtualEntusiasta) - function('radians', :longitude))
-                        + sin(function('radians', :latitude)) * sin(function('radians', s.latitudeAtualEntusiasta))
-                   )))
-              FROM ServicoMecanico s
-             WHERE s.status = :statusSolicitado
-               AND s.latitudeAtualEntusiasta BETWEEN :latitudeMinima AND :latitudeMaxima
-               AND s.longitudeAtualEntusiasta BETWEEN :longitudeMinima AND :longitudeMaxima
+            SELECT s FROM ServicoMecanico s
+              JOIN s.mecanicosElegiveis m
+             WHERE m.id = :idMecanico
+               AND s.id IN (:ids)
             """)
-    List<Object[]> buscarDisponiveisNaRegiao(@Param("latitude") Double latitude,
-                                             @Param("longitude") Double longitude,
-                                             @Param("latitudeMinima") Double latitudeMinima,
-                                             @Param("latitudeMaxima") Double latitudeMaxima,
-                                             @Param("longitudeMinima") Double longitudeMinima,
-                                             @Param("longitudeMaxima") Double longitudeMaxima,
-                                             @Param("statusSolicitado") StatusServico statusSolicitado);
+    List<ServicoMecanico> buscarPorIdsElegiveis(@Param("ids") Collection<UUID> ids,
+                                                @Param("idMecanico") UUID idMecanico);
 
     // ==================================================================
-    // TRANSICOES DE ESTADO
-    //
-    // Todas usam UPDATE condicional: o "AND status = :statusEsperado" e a guarda
-    // que impede duas pessoas de mudarem o mesmo chamado ao mesmo tempo (o mesmo
-    // defeito de check-then-act que existe no InscricaoService). Se o metodo
-    // devolver 0, o estado mudou no meio do caminho e o service lanca 422.
+    // TRANSICOES CRITICAS (guardas atomicas)
     // ==================================================================
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
@@ -86,7 +111,6 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
                           @Param("statusNovo") StatusServico statusNovo,
                           @Param("statusEsperado") StatusServico statusEsperado);
 
-    /** Rejeicao (ou expiracao): volta para a rede zerando prestador, valor e GPS. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE ServicoMecanico s
@@ -103,60 +127,70 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
                          @Param("statusNovo") StatusServico statusNovo,
                          @Param("statusEsperado") StatusServico statusEsperado);
 
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("""
-            UPDATE ServicoMecanico s
-               SET s.status = :statusNovo
-             WHERE s.id = :idServico
-               AND s.status = :statusEsperado
-            """)
-    int alterarStatus(@Param("idServico") UUID idServico,
-                      @Param("statusNovo") StatusServico statusNovo,
-                      @Param("statusEsperado") StatusServico statusEsperado);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("""
-            UPDATE ServicoMecanico s
-               SET s.confirmacaoConclusaoEntusiasta = true
-             WHERE s.id = :idServico
-               AND s.status = :statusEsperado
-               AND s.confirmacaoConclusaoEntusiasta = false
-            """)
-    int confirmarConclusaoEntusiasta(@Param("idServico") UUID idServico,
-                                     @Param("statusEsperado") StatusServico statusEsperado);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("""
-            UPDATE ServicoMecanico s
-               SET s.confirmacaoConclusaoMecanico = true
-             WHERE s.id = :idServico
-               AND s.status = :statusEsperado
-               AND s.confirmacaoConclusaoMecanico = false
-            """)
-    int confirmarConclusaoMecanico(@Param("idServico") UUID idServico,
-                                   @Param("statusEsperado") StatusServico statusEsperado);
-
     /**
-     * Handshake duplo: so finaliza quando as DUAS confirmacoes ja estao gravadas.
-     * Como a condicao inteira esta no WHERE, duas confirmacoes simultaneas nao
-     * conseguem finalizar o mesmo chamado duas vezes.
+     * Libera de uma vez TODAS as propostas abertas do mecanico (usado quando ele
+     * atinge a cota de 2 servicos ativos).
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE ServicoMecanico s
-               SET s.status = :statusFinalizado,
-                   s.dataHoraFinalizacao = :dataHoraFinalizacao
+               SET s.mecanico = null,
+                   s.valorProposto = null,
+                   s.latitudeAtualMecanico = null,
+                   s.longitudeAtualMecanico = null,
+                   s.dataHoraProposta = null,
+                   s.status = :statusNovo
+             WHERE s.mecanico = :mecanico
+               AND s.status = :statusEsperado
+            """)
+    int liberarPropostasDoMecanico(@Param("mecanico") Mecanico mecanico,
+                                   @Param("statusNovo") StatusServico statusNovo,
+                                   @Param("statusEsperado") StatusServico statusEsperado);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ServicoMecanico s
+               SET s.status = :statusNovo,
+                   s.dataHoraPendente = :dataHoraPendente
+             WHERE s.id = :idServico
+               AND s.status = :statusEsperado
+            """)
+    int aceitarProposta(@Param("idServico") UUID idServico,
+                        @Param("dataHoraPendente") LocalDateTime dataHoraPendente,
+                        @Param("statusNovo") StatusServico statusNovo,
+                        @Param("statusEsperado") StatusServico statusEsperado);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ServicoMecanico s
+               SET s.status = :statusChegou,
+                   s.dataHoraChegou = :dataHoraChegou
              WHERE s.id = :idServico
                AND s.status = :statusPendente
+               AND s.confirmacaoChegadaEntusiasta = true
+               AND s.confirmacaoChegadaMecanico = true
+            """)
+    int marcarChegou(@Param("idServico") UUID idServico,
+                     @Param("dataHoraChegou") LocalDateTime dataHoraChegou,
+                     @Param("statusChegou") StatusServico statusChegou,
+                     @Param("statusPendente") StatusServico statusPendente);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ServicoMecanico s
+               SET s.status = :statusFinalizado,
+                   s.dataHoraFinalizacao = :dataHoraFinalizacao,
+                   s.chaveIdempotencia = null
+             WHERE s.id = :idServico
+               AND s.status = :statusChegou
                AND s.confirmacaoConclusaoEntusiasta = true
                AND s.confirmacaoConclusaoMecanico = true
             """)
     int finalizarSeAmbosConfirmaram(@Param("idServico") UUID idServico,
                                     @Param("dataHoraFinalizacao") LocalDateTime dataHoraFinalizacao,
                                     @Param("statusFinalizado") StatusServico statusFinalizado,
-                                    @Param("statusPendente") StatusServico statusPendente);
+                                    @Param("statusChegou") StatusServico statusChegou);
 
-    /** Usado pela PropostaExpiradaTask: propostas vencidas voltam para a rede. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE ServicoMecanico s

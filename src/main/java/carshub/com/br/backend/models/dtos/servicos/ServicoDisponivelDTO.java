@@ -9,9 +9,7 @@ import java.util.UUID;
 
 /**
  * Chamado ainda na rede (SOLICITADO), visto pelo prestador no painel.
- *
- * Nao expoe valor, status interno nem telefone: o contato do colecionador so e
- * liberado depois que a proposta dele for aceita.
+ * Nao expoe valor, status interno nem telefone: o contato do colecionador so e liberado depois que a proposta dele for aceita.
  */
 public record ServicoDisponivelDTO(
         UUID idServico,

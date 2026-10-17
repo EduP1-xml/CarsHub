@@ -28,9 +28,10 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
-    show-sql: true
     hibernate:
       ddl-auto: update
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
     properties:
       hibernate:
         format_sql: true
@@ -41,12 +42,26 @@ app:
   servicos:
     # Tempo maximo, em minutos, que uma proposta espera resposta do colecionador
     minutosExpiracaoProposta: ${MINUTOS_EXPIRACAO_PROPOSTA:30}
+    # Tempo maximo, em horas, que um chamado pode ficar SOLICITADO na rede
+    horasExpiracaoSolicitacao: ${HORAS_EXPIRACAO_SOLICITACAO:3}
   geocodificacao:
-    # Google Geocoding API. A chave fica SO no back: o front recebe apenas as coordenadas e o endereco ja formatado, nunca a credencial, que ainda tenho q colocar.
+    # Google Geocoding API. A chave fica SO no back: o front recebe apenas as
+    # coordenadas e o endereco ja formatado, nunca a credencial.
     urlBase: ${GEOCODIFICACAO_URL_BASE:https://maps.googleapis.com/maps/api/geocode/json}
     chave: ${GOOGLE_MAPS_API_KEY:}
     tempoLimiteConexaoMs: ${GEOCODIFICACAO_TEMPO_LIMITE_CONEXAO_MS:3000}
-    tempoLimiteLeituraMs: ${GEOCODIFICACAO_TEMPO_LIMITE_LEITURA_MS:3000}
+    # Caminho direto (endereco -> coordenada) e bloqueante: 3 s.
+    tempoLimiteLeituraDiretaMs: ${GEOCODIFICACAO_TEMPO_LIMITE_LEITURA_DIRETA_MS:3000}
+    # Caminho reverso (coordenada -> endereco) e best-effort: 800 ms.
+    tempoLimiteLeituraReversaMs: ${GEOCODIFICACAO_TEMPO_LIMITE_LEITURA_REVERSA_MS:800}
+    # Resiliencia
+    tentativasExtras: ${GEOCODIFICACAO_TENTATIVAS_EXTRAS:2}
+    esperaEntreTentativasMs: ${GEOCODIFICACAO_ESPERA_ENTRE_TENTATIVAS_MS:250}
+    falhasParaAbrirCircuito: ${GEOCODIFICACAO_FALHAS_PARA_ABRIR_CIRCUITO:5}
+    segundosCircuitoAberto: ${GEOCODIFICACAO_SEGUNDOS_CIRCUITO_ABERTO:60}
+    # Cota mensal: 40.000 requisicoes/mes no plano gratuito
+    limiteMensalRequisicoes: ${GEOCODIFICACAO_LIMITE_MENSAL:40000}
+    bloquearAoExcederLimite: ${GEOCODIFICACAO_BLOQUEAR_AO_EXCEDER:false}
 
 frontend:
   url: ${FRONTEND_URL:http://localhost:5173}

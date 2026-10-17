@@ -6,6 +6,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.TransactionSystemException;
 import org.springframework.validation.FieldError;
@@ -179,6 +180,32 @@ public class GlobalException {
     @ExceptionHandler(PlacaJaCadastradaException.class)
     public ResponseEntity<String> placaJaCadastrada(PlacaJaCadastradaException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
+
+    // ==================================================================
+    // 409 - SOLICITACAO DUPLICADA (idempotencia)
+    // ==================================================================
+
+    @ExceptionHandler(SolicitacaoDuplicadaException.class)
+    public ResponseEntity<String> solicitacaoDuplicada(SolicitacaoDuplicadaException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
+
+    // ==================================================================
+    // 409 - CONFLITO DE CONCORRENCIA (travamento otimista)
+    // ==================================================================
+
+    /**
+     * Duas requisicoes tentaram alterar o mesmo registro ao mesmo tempo e o
+     * @Version detectou a disputa. O cliente deve recarregar e tentar de novo.
+     */
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<String> conflitoDeConcorrencia(ObjectOptimisticLockingFailureException ex) {
+        log.warn("Conflito de concorrência detectado: {}", ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body("Este registro foi alterado por outra pessoa enquanto você o editava. "
+                        + "Atualize a tela e tente novamente.");
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

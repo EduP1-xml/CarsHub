@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
@@ -28,4 +29,8 @@ public class Mecanico extends PrestadorServico {
 
     @Column(name = "longitude_Mecanico")
     private Double longitude;
+
+    /** Ultima proposta enviada por este mecanico (cooldown de 1 minuto). */
+    @Column(name = "dataHoraUltimaProposta_Mecanico")
+    private LocalDateTime dataHoraUltimaProposta;
 }
