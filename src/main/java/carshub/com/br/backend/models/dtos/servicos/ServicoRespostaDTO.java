@@ -17,6 +17,11 @@ import java.util.UUID;
  * quantidadeMecanicosElegiveis: quantos mecanicos ativos ofertam TODOS os servicos
  * (resolvido na criacao). Zero significa "ninguem compativel agora" e o app pode
  * avisar o colecionador. No guincho vem null (nao ha catalogo de servicos).
+ *
+ * MATCH: os 5 campos finais so existem quando ha prestador vinculado.
+ *  - notaMediaPrestador: NOTA AJUSTADA (bayesiana, neutro 4.0), nao a media crua;
+ *  - servicosAtivosDoPrestador: carga ativa EXCLUINDO o proprio chamado (0 ou 1);
+ *  - distanciaAteOcorrencia: do ponto declarado na proposta (ou do perfil) ate a ocorrencia.
  */
 public record ServicoRespostaDTO(
         UUID idServico,
@@ -68,5 +73,11 @@ public record ServicoRespostaDTO(
         LocalDateTime dataHoraSolicitacao,
         LocalDateTime dataHoraProposta,
         LocalDateTime dataHoraPendente,
-        LocalDateTime dataHoraFinalizacao
+        LocalDateTime dataHoraFinalizacao,
+
+        Integer notaMatch,
+        Double notaMediaPrestador,
+        Long quantidadeAvaliacoes,
+        Double distanciaAteOcorrencia,
+        Long servicosAtivosDoPrestador
 ) {}

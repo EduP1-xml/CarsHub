@@ -27,7 +27,7 @@ public record PaginaRespostaDTO<T>(
 ) {
 
     public static <T> PaginaRespostaDTO<T> de(List<T> listaCompleta, int pagina, int tamanho) {
-        int tamanhoSeguro = (tamanho <= 0) ? 20 : tamanho;
+        int tamanhoSeguro = (tamanho <= 0) ? 5 : tamanho;
         int total = listaCompleta.size();
         int totalPaginas = (total == 0) ? 0 : (int) Math.ceil((double) total / tamanhoSeguro);
         int paginaSegura = Math.max(0, pagina);

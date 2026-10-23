@@ -36,7 +36,7 @@ public class PainelMecanicoController {
             @RequestParam(name = "longitude", required = false) Double longitude,
             @RequestParam(name = "endereco", required = false) String endereco,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
-            @RequestParam(name = "tamanho", defaultValue = "20") int tamanho) {
+            @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 
         List<ServicoDisponivelDTO> chamados =
                 servicoMecanico.listarServicosDisponiveis(id, raioKm, latitude, longitude, endereco);
@@ -48,7 +48,7 @@ public class PainelMecanicoController {
     public ResponseEntity<PaginaRespostaDTO<ServicoRespostaDTO>> listarMinhaFilaDeTrabalho(
             @RequestHeader("user-id") UUID id,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
-            @RequestParam(name = "tamanho", defaultValue = "20") int tamanho) {
+            @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 
         return ResponseEntity.ok(PaginaRespostaDTO.de(servicoMecanico.listarMinhaFilaDeTrabalho(id), pagina, tamanho));
     }

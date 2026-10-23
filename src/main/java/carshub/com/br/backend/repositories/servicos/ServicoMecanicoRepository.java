@@ -86,6 +86,39 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
     List<ServicoMecanico> buscarPorIdsElegiveis(@Param("ids") Collection<UUID> ids,
                                                 @Param("idMecanico") UUID idMecanico);
 
+    /**
+     * carga ativa por mecanico (PENDENTE/CHEGOU) levantada em UMA
+     * consulta para as listagens, evitando 1 count por chamado (N+1). O par
+     * (id, contagem) e montado em Map pelo service.
+     */
+    @Query("""
+            SELECT a.mecanico.id, COUNT(a)
+              FROM ServicoMecanico a
+             WHERE a.mecanico.id IN :ids
+               AND a.status IN :statuses
+             GROUP BY a.mecanico.id
+            """)
+    List<Object[]> contarAtivosPorMecanico(@Param("ids") Collection<UUID> ids,
+                                           @Param("statuses") Collection<StatusServico> statuses);
+
+    /**
+     * MATCH (M4): mecanicos da lista de ELEGIVEIS gravada na criacao, menos os
+     * que estao com a cota cheia (2 ativos) — quem nao pode receber proposta nem
+     * aparece para o colecionador.
+     */
+    @Query("""
+            SELECT m FROM ServicoMecanico s
+              JOIN s.mecanicosElegiveis m
+             WHERE s.id = :idServico
+               AND m.ativo = true
+               AND (SELECT COUNT(a) FROM ServicoMecanico a
+                     WHERE a.mecanico = m
+                       AND a.status IN :statusAtivos) < :maximoAtivos
+            """)
+    List<Mecanico> buscarElegiveisComCotaDisponivel(@Param("idServico") UUID idServico,
+                                                    @Param("statusAtivos") Collection<StatusServico> statusAtivos,
+                                                    @Param("maximoAtivos") long maximoAtivos);
+
     // ==================================================================
     // TRANSICOES CRITICAS (guardas atomicas)
     // ==================================================================
@@ -98,9 +131,11 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
                    s.latitudeAtualMecanico = :latitude,
                    s.longitudeAtualMecanico = :longitude,
                    s.dataHoraProposta = :dataHoraProposta,
-                   s.status = :statusNovo
+                   s.status = :statusNovo,
+                   s.quantidadePropostas = s.quantidadePropostas + 1
              WHERE s.id = :idServico
                AND s.status = :statusEsperado
+               AND s.quantidadePropostas < :maximoPropostas
             """)
     int registrarProposta(@Param("idServico") UUID idServico,
                           @Param("mecanico") Mecanico mecanico,
@@ -109,7 +144,8 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
                           @Param("longitude") Double longitude,
                           @Param("dataHoraProposta") LocalDateTime dataHoraProposta,
                           @Param("statusNovo") StatusServico statusNovo,
-                          @Param("statusEsperado") StatusServico statusEsperado);
+                          @Param("statusEsperado") StatusServico statusEsperado,
+                          @Param("maximoPropostas") int maximoPropostas);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""

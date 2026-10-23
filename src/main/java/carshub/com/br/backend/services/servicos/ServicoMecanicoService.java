@@ -8,6 +8,7 @@ import carshub.com.br.backend.models.dtos.geocodificacao.LocalizacaoGeocodificad
 import carshub.com.br.backend.models.dtos.servicos.AvaliacaoServicoDTO;
 import carshub.com.br.backend.models.dtos.servicos.EnderecoOcorrenciaDTO;
 import carshub.com.br.backend.models.dtos.servicos.PropostaServicoDTO;
+import carshub.com.br.backend.models.dtos.servicos.PrestadorCompativelDTO;
 import carshub.com.br.backend.models.dtos.servicos.ServicoDisponivelDTO;
 import carshub.com.br.backend.models.dtos.servicos.ServicoMecanicoRegistroDTO;
 import carshub.com.br.backend.models.dtos.servicos.ServicoRespostaDTO;
@@ -18,6 +19,7 @@ import carshub.com.br.backend.models.entities.servicos.EnderecoOcorrencia;
 import carshub.com.br.backend.models.entities.servicos.ServicoMecanico;
 import carshub.com.br.backend.models.enums.mecanicos.ServicosOfertados;
 import carshub.com.br.backend.models.enums.servicos.StatusServico;
+import carshub.com.br.backend.models.enums.tiposUsuarios.TipoPrestadorServico;
 import carshub.com.br.backend.models.enums.servicos.TipoServico;
 import carshub.com.br.backend.repositories.CarroRepository;
 import carshub.com.br.backend.repositories.EntusiastaRepository;
@@ -33,6 +35,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -44,7 +49,6 @@ import java.util.UUID;
 /**
  * Maquina de estados do servico mecanico:
  * SOLICITADO -> PROPOSTA -> PENDENTE -> CHEGOU -> FINALIZADO.
- *
  * REGRAS DESTA CLASSE:
  *  - transicoes criticas por UPDATE condicional (guarda de estado atomica);
  *  - ELEGIBILIDADE: na criacao o sistema resolve QUAIS mecanicos ofertam todos os
@@ -72,12 +76,16 @@ public class ServicoMecanicoService {
     /** Maximo de servicos que o mecanico pode manter em andamento ao mesmo tempo. */
     private static final long maximoServicosAtivos = 2;
 
+    /** MATCH: teto de propostas por chamado ao longo da vida (regra N14). */
+    private static final int limitePropostasPorServico = 10;
+
     /**
      * Status que OCUPAM a cota de servicos ativos: o colecionador ja escolheu o
      * mecanico, que esta a caminho (PENDENTE) ou no local (CHEGOU).
      * PROPOSTA nao ocupa cota — o mecanico pode ter varias aguardando resposta;
      * quando a cota fecha, as excedentes voltam para a rede.
      */
+
     private static final List<StatusServico> statusDeServicoAtivo =
             List.of(StatusServico.PENDENTE, StatusServico.CHEGOU);
 
@@ -139,7 +147,11 @@ public class ServicoMecanicoService {
                 ? repositorioServicoMecanico.findAllByEntusiasta_IdAndStatusNotOrderByDataHoraSolicitacaoDesc(idEntusiasta, StatusServico.FINALIZADO)
                 : repositorioServicoMecanico.findAllByEntusiasta_IdOrderByDataHoraSolicitacaoDesc(idEntusiasta);
 
-        return servicos.stream().map(this::mapearParaResposta).toList();
+        Map<UUID, Long> ativosPorMecanico = contarAtivosDosMecanicos(servicos);
+
+        return servicos.stream()
+                .map(servico -> mapearParaResposta(servico, ativosPorMecanico))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -388,9 +400,7 @@ public class ServicoMecanicoService {
         return finalizarSePossivel(idServico);
     }
 
-    // ==================================================================
     // LADO DO MECANICO
-    // ==================================================================
 
     @Transactional(readOnly = true)
     public List<ServicoDisponivelDTO> listarServicosDisponiveis(UUID idMecanico, Double raioKm,
@@ -415,27 +425,37 @@ public class ServicoMecanicoService {
             return List.of();
         }
 
-        // 2) Elegibilidade em JPQL (UUID tipado) e Haversine/corte/ordem em Java.
+        // 2) Elegibilidade em JPQL (UUID tipado); Haversine, corte do raio e
+        //    ordenacao por distancia em Java. Sem notaMatch aqui: o painel do
+        //    prestador so mostra as informacoes do chamado (decisao de produto).
         return repositorioServicoMecanico.buscarPorIdsElegiveis(idsCandidatos, mecanico.getId())
                 .stream()
-                .map(servico -> new ChamadoComDistancia(servico, DistanciaGeografica.distanciaKm(
-                        origem.latitude(),
-                        origem.longitude(),
-                        servico.getLatitudeAtualEntusiasta(),
-                        servico.getLongitudeAtualEntusiasta())))
+                .map(servico -> {
+                    Double distanciaKm = DistanciaGeografica.distanciaKm(
+                            origem.latitude(),
+                            origem.longitude(),
+                            servico.getLatitudeAtualEntusiasta(),
+                            servico.getLongitudeAtualEntusiasta());
+
+                    return new ChamadoComDistancia(servico, distanciaKm);
+                })
                 .filter(chamado -> chamado.dentroDoRaio(raio))
-                .sorted(Comparator.comparing(ChamadoComDistancia::distanciaKm))
+                .sorted(ordenacaoDosChamados())
                 .map(chamado -> mapearParaDisponivel(chamado.servico(), chamado.distanciaKm()))
                 .toList();
     }
+    // ==================================================================
 
     @Transactional(readOnly = true)
     public List<ServicoRespostaDTO> listarMinhaFilaDeTrabalho(UUID idMecanico) {
         buscarEValidarMecanico(idMecanico);
 
+        Map<UUID, Long> ativosPorMecanico = Map.of(
+                idMecanico, repositorioServicoMecanico.countByMecanico_IdAndStatusIn(idMecanico, statusDeServicoAtivo));
+
         return repositorioServicoMecanico.findAllByMecanico_IdOrderByDataHoraSolicitacaoDesc(idMecanico)
                 .stream()
-                .map(this::mapearParaResposta)
+                .map(servico -> mapearParaResposta(servico, ativosPorMecanico))
                 .toList();
     }
 
@@ -460,12 +480,19 @@ public class ServicoMecanicoService {
         int linhasAfetadas = repositorioServicoMecanico.registrarProposta(
                 idServico, mecanico, dados.valorProposto(),
                 localizacao.latitude(), localizacao.longitude(), LocalDateTime.now(),
-                StatusServico.PROPOSTA, StatusServico.SOLICITADO);
+                StatusServico.PROPOSTA, StatusServico.SOLICITADO, limitePropostasPorServico);
 
         if (linhasAfetadas == 0) {
+            ServicoMecanico atual = buscarServicoPorId(idServico);
+
+            if (atual.getStatus() == StatusServico.SOLICITADO) {
+                throw new RegraDeNegocioException(
+                        "Este chamado já recebeu o limite de " + limitePropostasPorServico
+                                + " propostas. Aguarde o colecionador decidir.");
+            }
+
             throw new RegraDeNegocioException("Outro mecânico enviou uma proposta primeiro. Atualize a lista de chamados.");
         }
-
         controleCooldown.registrarPropostaDoMecanico(mecanico);
 
         return mapearParaResposta(buscarServicoPorId(idServico));
@@ -615,10 +642,34 @@ public class ServicoMecanicoService {
     }
 
     private ServicoRespostaDTO finalizarSePossivel(UUID idServico) {
-        repositorioServicoMecanico.finalizarSeAmbosConfirmaram(idServico, LocalDateTime.now(),
-                StatusServico.FINALIZADO, StatusServico.CHEGOU);
+        int linhasAfetadas = repositorioServicoMecanico.finalizarSeAmbosConfirmaram(
+                idServico, LocalDateTime.now(), StatusServico.FINALIZADO, StatusServico.CHEGOU);
+
+        if (linhasAfetadas == 1) {
+            ServicoMecanico finalizado = buscarServicoPorId(idServico);
+            atualizarReputacaoDoMecanico(finalizado.getMecanico(), finalizado.getNotaAvaliacaoEntusiasta());
+        }
 
         return mapearParaResposta(buscarServicoPorId(idServico));
+    }
+
+    /**
+     * O agregado de reputacao do mecanico (media + quantidade) e
+     * atualizado na CONCLUSAO do servico, na mesma transacao do UPDATE de
+     * finalizacao. A nota do colecionador existe desde o CHEGOU e a conclusao
+     * exige que ela esteja preenchida.
+     */
+    private void atualizarReputacaoDoMecanico(Mecanico mecanico, Integer nota) {
+        if (mecanico == null || nota == null) {
+            return;
+        }
+
+        double mediaAtual = mecanico.getNotaMediaPrestador() == null ? 0.0 : mecanico.getNotaMediaPrestador();
+        long quantidadeAtual = mecanico.getQuantidadeAvaliacoes() == null ? 0L : mecanico.getQuantidadeAvaliacoes();
+
+        mecanico.setNotaMediaPrestador((mediaAtual * quantidadeAtual + nota) / (quantidadeAtual + 1.0));
+        mecanico.setQuantidadeAvaliacoes(quantidadeAtual + 1);
+        repositorioMecanico.save(mecanico);
     }
 
     // ==================================================================
@@ -851,13 +902,135 @@ public class ServicoMecanicoService {
     }
 
     // ==================================================================
+    // MATCH: RANKING DE PRESTADORES PARA UM CHAMADO
+    // ==================================================================
+
+    /**
+     * Prestadores compativeis de UM chamado, para o colecionador.
+     * Quem esta com a cota cheia (2 ativos) nem aparece,
+     * porque nao poderia receber a proposta (o corte acontece no SQL, em
+     * buscarElegiveisComCotaDisponivel). Sem coordenadas no perfil = fora do
+     * ranking (sem distancia nao ha score). Ordem: notaMatch desc, notaAjustada
+     * desc, distancia asc e, empatando tudo, nome alfabetico.
+     */
+    @Transactional(readOnly = true)
+    public List<PrestadorCompativelDTO> listarPrestadoresCompativeis(ServicoMecanico servico, UUID idEntusiasta) {
+        if (!servico.getEntusiasta().getId().equals(idEntusiasta)) {
+            throw new PerfilIncompativelException("Acesso Negado: Esta solicitação não pertence a você.");
+        }
+
+        List<Mecanico> elegiveis = repositorioServicoMecanico.buscarElegiveisComCotaDisponivel(
+                servico.getId(), statusDeServicoAtivo, maximoServicosAtivos);
+
+        long semCoordenadas = elegiveis.stream()
+                .filter(m -> m.getLatitude() == null || m.getLongitude() == null)
+                .count();
+
+        if (semCoordenadas > 0) {
+            log.warn("{} mecânico(s) compatível(is) sem coordenadas ficaram de fora do ranking do chamado {}.",
+                    semCoordenadas, servico.getId());
+        }
+
+        return elegiveis.stream()
+                .filter(m -> m.getLatitude() != null && m.getLongitude() != null)
+                .map(m -> mapearPrestadorCompativel(m, servico))
+                .sorted(ordenacaoDosPrestadores())
+                .toList();
+    }
+
+    private PrestadorCompativelDTO mapearPrestadorCompativel(Mecanico mecanico, ServicoMecanico servico) {
+        Double distanciaKm = DistanciaGeografica.distanciaKm(
+                mecanico.getLatitude(), mecanico.getLongitude(),
+                servico.getLatitudeAtualEntusiasta(), servico.getLongitudeAtualEntusiasta());
+
+        return new PrestadorCompativelDTO(
+                mecanico.getId(),
+                TipoPrestadorServico.MECANICO,
+                mecanico.getNome(),
+                CalculadoraMatch.notaAjustadaArredondada(
+                        mecanico.getNotaMediaPrestador(), mecanico.getQuantidadeAvaliacoes()),
+                mecanico.getQuantidadeAvaliacoes() == null ? 0L : mecanico.getQuantidadeAvaliacoes(),
+                distanciaKm,
+                CalculadoraMatch.notaMatch(
+                        mecanico.getNotaMediaPrestador(), mecanico.getQuantidadeAvaliacoes(), distanciaKm));
+    }
+
+    private Comparator<PrestadorCompativelDTO> ordenacaoDosPrestadores() {
+        return Comparator.comparing(PrestadorCompativelDTO::notaMatch).reversed()
+                .thenComparing(Comparator.comparingDouble(PrestadorCompativelDTO::notaAjustada).reversed())
+                .thenComparing(PrestadorCompativelDTO::distanciaKm)
+                .thenComparing(PrestadorCompativelDTO::nomePrestador);
+    }
+
+    /** UMA consulta para a carga ativa de todos os mecanicos da lista (evita N+1). */
+    private Map<UUID, Long> contarAtivosDosMecanicos(List<ServicoMecanico> servicos) {
+        List<UUID> ids = servicos.stream()
+                .map(ServicoMecanico::getMecanico)
+                .filter(Objects::nonNull)
+                .map(Mecanico::getId)
+                .distinct()
+                .toList();
+
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<UUID, Long> ativos = new HashMap<>();
+        for (Object[] linha : repositorioServicoMecanico.contarAtivosPorMecanico(ids, statusDeServicoAtivo)) {
+            ativos.put((UUID) linha[0], (Long) linha[1]);
+        }
+
+        return ativos;
+    }
+    // ==================================================================
     // MAPEAMENTO
     // ==================================================================
 
     private ServicoRespostaDTO mapearParaResposta(ServicoMecanico servico) {
+        return mapearParaResposta(servico, null);
+    }
+
+    /**
+     * ativosPorMecanico: carga ativa levantada em UMA consulta para as LISTAGENS
+     * (evita N+1). Quando null (chamado unico), a carga e consultada pontualmente.
+     */
+    private ServicoRespostaDTO mapearParaResposta(ServicoMecanico servico, Map<UUID, Long> ativosPorMecanico) {
         Mecanico mecanico = servico.getMecanico();
         boolean contatoLiberado = servico.getStatus() != StatusServico.SOLICITADO
                 && servico.getStatus() != StatusServico.PROPOSTA;
+
+        Integer notaMatch = null;
+        Double notaMediaPrestador = null;
+        Long quantidadeAvaliacoes = null;
+        Double distanciaAteOcorrencia = null;
+        Long servicosAtivosDoPrestador = null;
+
+        if (mecanico != null) {
+            notaMediaPrestador = CalculadoraMatch.notaAjustadaArredondada(
+                    mecanico.getNotaMediaPrestador(), mecanico.getQuantidadeAvaliacoes());
+            quantidadeAvaliacoes = mecanico.getQuantidadeAvaliacoes() == null ? 0L : mecanico.getQuantidadeAvaliacoes();
+
+            Double latitudePrestador = servico.getLatitudeAtualMecanico() != null
+                    ? servico.getLatitudeAtualMecanico() : mecanico.getLatitude();
+            Double longitudePrestador = servico.getLongitudeAtualMecanico() != null
+                    ? servico.getLongitudeAtualMecanico() : mecanico.getLongitude();
+
+            if (latitudePrestador != null && longitudePrestador != null) {
+                distanciaAteOcorrencia = DistanciaGeografica.distanciaKm(
+                        latitudePrestador, longitudePrestador,
+                        servico.getLatitudeAtualEntusiasta(), servico.getLongitudeAtualEntusiasta());
+
+                notaMatch = CalculadoraMatch.notaMatch(
+                        mecanico.getNotaMediaPrestador(), mecanico.getQuantidadeAvaliacoes(), distanciaAteOcorrencia);
+            }
+
+            long ativos = (ativosPorMecanico != null)
+                    ? ativosPorMecanico.getOrDefault(mecanico.getId(), 0L)
+                    : repositorioServicoMecanico.countByMecanico_IdAndStatusIn(mecanico.getId(), statusDeServicoAtivo);
+
+            boolean chamadoOcupaCota = statusDeServicoAtivo.contains(servico.getStatus());
+            servicosAtivosDoPrestador = chamadoOcupaCota ? Math.max(0, ativos - 1) : ativos;
+        }
 
         return new ServicoRespostaDTO(
                 servico.getId(),
@@ -897,21 +1070,21 @@ public class ServicoMecanicoService {
                 servico.getDataHoraSolicitacao(),
                 servico.getDataHoraProposta(),
                 servico.getDataHoraPendente(),
-                servico.getDataHoraFinalizacao());
+                servico.getDataHoraFinalizacao(),
+                notaMatch,
+                notaMediaPrestador,
+                quantidadeAvaliacoes,
+                distanciaAteOcorrencia,
+                servicosAtivosDoPrestador);
     }
 
     private ServicoDisponivelDTO mapearParaDisponivel(ServicoMecanico servico, Double distanciaKm) {
         return new ServicoDisponivelDTO(
                 servico.getId(),
-                TipoServico.MECANICO,
                 servico.getEntusiasta().getNome(),
-                descreverCarro(servico.getCarro()),
-                new ArrayList<>(servico.getServicos()),
-                servico.getEnderecoAtualEntusiasta(),
-                servico.getLatitudeAtualEntusiasta(),
-                servico.getLongitudeAtualEntusiasta(),
                 distanciaKm,
-                servico.getDataHoraSolicitacao());
+                new ArrayList<>(servico.getServicos()),
+                descreverCarro(servico.getCarro()));
     }
 
     private EnderecoOcorrenciaDTO mapearEnderecoEstruturado(EnderecoOcorrencia endereco) {
@@ -938,13 +1111,20 @@ public class ServicoMecanicoService {
     // ==================================================================
 
     /**
-     * Chamado com a distancia calculada UMA unica vez: o filtro do raio e o sort
+     * Chamado com a distancia calculada UMA unica vez: filtro e ordenacao
      * reaproveitam o mesmo valor, sem recalcular trigonometria.
+     * Ordem do painel (MATCH): distancia asc -> nome do entusiasta (alfabetico,
+     * para o empate total ser estavel).
      */
     private record ChamadoComDistancia(ServicoMecanico servico, Double distanciaKm) {
 
         boolean dentroDoRaio(double raioKm) {
             return distanciaKm != null && distanciaKm <= raioKm;
         }
+    }
+
+    private Comparator<ChamadoComDistancia> ordenacaoDosChamados() {
+        return Comparator.comparing(ChamadoComDistancia::distanciaKm)
+                .thenComparing(chamado -> chamado.servico().getEntusiasta().getNome());
     }
 }

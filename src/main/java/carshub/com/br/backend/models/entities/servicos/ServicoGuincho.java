@@ -111,6 +111,14 @@ public class ServicoGuincho {
     @Column(name = "dataHoraPendente_ServicoGuincho")
     private LocalDateTime dataHoraPendente;
 
+    /**
+     * MATCH (regra N14): quantas propostas este chamado ja recebeu ao longo da
+     * vida — teto de 10. Nunca decrementa: rejeitar/expirada so devolve o chamado
+     * para a rede, nao apaga a proposta que existiu.
+     */
+    @Column(name = "quantidadePropostas_ServicoGuincho", nullable = false)
+    private Integer quantidadePropostas = 0;
+
     // ==================================================================
     // EVIDENCIAS: FOTOS
     // ==================================================================

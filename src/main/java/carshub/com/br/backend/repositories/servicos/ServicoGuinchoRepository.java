@@ -56,6 +56,28 @@ public interface ServicoGuinchoRepository extends JpaRepository<ServicoGuincho, 
     /** Busca tipada das entidades dos IDs que vieram da consulta espacial. */
     @Query("SELECT s FROM ServicoGuincho s WHERE s.id IN (:ids)")
     List<ServicoGuincho> buscarPorIds(@Param("ids") Collection<UUID> ids);
+
+    /** carga ativa por guincho em UMA consulta para as listagens (evita N+1). */
+    @Query("""
+            SELECT a.guincho.id, COUNT(a)
+              FROM ServicoGuincho a
+             WHERE a.guincho.id IN :ids
+               AND a.status IN :statuses
+             GROUP BY a.guincho.id
+            """)
+    List<Object[]> contarAtivosPorGuincho(@Param("ids") Collection<UUID> ids,
+                                          @Param("statuses") Collection<StatusServico> statuses);
+
+    //Guinchos ATIVOS que ainda tem vaga na cota (menos de 2 ativos).
+    @Query("""
+            SELECT g FROM Guincho g
+             WHERE g.ativo = true
+               AND (SELECT COUNT(a) FROM ServicoGuincho a
+                     WHERE a.guincho = g
+                       AND a.status IN :statusAtivos) < :maximoAtivos
+            """)
+    List<Guincho> buscarDisponiveisComCota(@Param("statusAtivos") Collection<StatusServico> statusAtivos,
+                                           @Param("maximoAtivos") long maximoAtivos);
     // ==================================================================
     // TRANSICOES CRITICAS (guardas atomicas)
     // ==================================================================
@@ -68,9 +90,11 @@ public interface ServicoGuinchoRepository extends JpaRepository<ServicoGuincho, 
                    s.latitudeAtualGuincho = :latitude,
                    s.longitudeAtualGuincho = :longitude,
                    s.dataHoraProposta = :dataHoraProposta,
-                   s.status = :statusNovo
+                   s.status = :statusNovo,
+                   s.quantidadePropostas = s.quantidadePropostas + 1
              WHERE s.id = :idServico
                AND s.status = :statusEsperado
+               AND s.quantidadePropostas < :maximoPropostas
             """)
     int registrarProposta(@Param("idServico") UUID idServico,
                           @Param("guincho") Guincho guincho,
@@ -79,7 +103,8 @@ public interface ServicoGuinchoRepository extends JpaRepository<ServicoGuincho, 
                           @Param("longitude") Double longitude,
                           @Param("dataHoraProposta") LocalDateTime dataHoraProposta,
                           @Param("statusNovo") StatusServico statusNovo,
-                          @Param("statusEsperado") StatusServico statusEsperado);
+                          @Param("statusEsperado") StatusServico statusEsperado,
+                          @Param("maximoPropostas") int maximoPropostas);
 
     /** Rejeicao ou expiracao: volta para a rede zerando prestador, valor e GPS DO GUINCHO. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)

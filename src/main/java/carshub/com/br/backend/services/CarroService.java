@@ -147,8 +147,9 @@ public class CarroService {
         Carro carro = verificarPropriedadeDoCarro(carroId, entusiastaId);
         Entusiasta proprietario = carro.getColecionador().getEntusiasta();
 
+        proprietario.getColecionador().getCarros().remove(carro); // desassocia ANTES de deletar
         carroRepository.delete(carro);
-        proprietario.getColecionador().getCarros().remove(carro);
+        carroRepository.flush(); // garante que o DELETE do carro sai antes do flush final
 
         proprietario.verificaExcluiGaragem();
         entusiastaRepository.save(proprietario);

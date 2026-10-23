@@ -8,6 +8,7 @@ import carshub.com.br.backend.models.dtos.geocodificacao.LocalizacaoGeocodificad
 import carshub.com.br.backend.models.dtos.servicos.AvaliacaoServicoDTO;
 import carshub.com.br.backend.models.dtos.servicos.EnderecoOcorrenciaDTO;
 import carshub.com.br.backend.models.dtos.servicos.PropostaServicoDTO;
+import carshub.com.br.backend.models.dtos.servicos.PrestadorCompativelDTO;
 import carshub.com.br.backend.models.dtos.servicos.ServicoDisponivelDTO;
 import carshub.com.br.backend.models.dtos.servicos.ServicoGuinchoRegistroDTO;
 import carshub.com.br.backend.models.dtos.servicos.ServicoRespostaDTO;
@@ -17,6 +18,7 @@ import carshub.com.br.backend.models.entities.Guincho;
 import carshub.com.br.backend.models.entities.servicos.EnderecoOcorrencia;
 import carshub.com.br.backend.models.entities.servicos.ServicoGuincho;
 import carshub.com.br.backend.models.enums.servicos.StatusServico;
+import carshub.com.br.backend.models.enums.tiposUsuarios.TipoPrestadorServico;
 import carshub.com.br.backend.models.enums.servicos.TipoServico;
 import carshub.com.br.backend.repositories.CarroRepository;
 import carshub.com.br.backend.repositories.EntusiastaRepository;
@@ -32,6 +34,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -85,6 +90,7 @@ public class ServicoGuinchoService {
     private final GeocodificacaoService servicoGeocodificacao;
     private final FileStorageService servicoArmazenamentoArquivo;
     private final ControleCooldown controleCooldown;
+    private static final int limitePropostasPorServico = 10;
 
     // ==================================================================
     // LADO DO COLECIONADOR
@@ -132,7 +138,11 @@ public class ServicoGuinchoService {
                 ? repositorioServicoGuincho.findAllByEntusiasta_IdAndStatusNotOrderByDataHoraSolicitacaoDesc(idEntusiasta, StatusServico.FINALIZADO)
                 : repositorioServicoGuincho.findAllByEntusiasta_IdOrderByDataHoraSolicitacaoDesc(idEntusiasta);
 
-        return servicos.stream().map(this::mapearParaResposta).toList();
+        Map<UUID, Long> ativosPorGuincho = contarAtivosDosGuinchos(servicos);
+
+        return servicos.stream()
+                .map(servico -> mapearParaResposta(servico, ativosPorGuincho))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -408,13 +418,17 @@ public class ServicoGuinchoService {
 
         return repositorioServicoGuincho.buscarPorIds(idsCandidatos)
                 .stream()
-                .map(servico -> new ChamadoComDistancia(servico, DistanciaGeografica.distanciaKm(
-                        origem.latitude(),
-                        origem.longitude(),
-                        servico.getLatitudeAtualEntusiasta(),
-                        servico.getLongitudeAtualEntusiasta())))
+                .map(servico -> {
+                    Double distanciaKm = DistanciaGeografica.distanciaKm(
+                            origem.latitude(),
+                            origem.longitude(),
+                            servico.getLatitudeAtualEntusiasta(),
+                            servico.getLongitudeAtualEntusiasta());
+
+                    return new ChamadoComDistancia(servico, distanciaKm);
+                })
                 .filter(chamado -> chamado.dentroDoRaio(raio))
-                .sorted(Comparator.comparing(ChamadoComDistancia::distanciaKm))
+                .sorted(ordenacaoDosChamados())
                 .map(chamado -> mapearParaDisponivel(chamado.servico(), chamado.distanciaKm()))
                 .toList();
     }
@@ -423,9 +437,12 @@ public class ServicoGuinchoService {
     public List<ServicoRespostaDTO> listarMinhaFilaDeTrabalho(UUID idGuincho) {
         buscarEValidarGuincho(idGuincho);
 
+        Map<UUID, Long> ativosPorGuincho = Map.of(
+                idGuincho, repositorioServicoGuincho.countByGuincho_IdAndStatusIn(idGuincho, statusDeServicoAtivo));
+
         return repositorioServicoGuincho.findAllByGuincho_IdOrderByDataHoraSolicitacaoDesc(idGuincho)
                 .stream()
-                .map(this::mapearParaResposta)
+                .map(servico -> mapearParaResposta(servico, ativosPorGuincho))
                 .toList();
     }
 
@@ -449,12 +466,19 @@ public class ServicoGuinchoService {
         int linhasAfetadas = repositorioServicoGuincho.registrarProposta(
                 idServico, guincho, dados.valorProposto(),
                 localizacao.latitude(), localizacao.longitude(), LocalDateTime.now(),
-                StatusServico.PROPOSTA, StatusServico.SOLICITADO);
+                StatusServico.PROPOSTA, StatusServico.SOLICITADO, limitePropostasPorServico);
 
         if (linhasAfetadas == 0) {
+            ServicoGuincho atual = buscarServicoPorId(idServico);
+
+            if (atual.getStatus() == StatusServico.SOLICITADO) {
+                throw new RegraDeNegocioException(
+                        "Este chamado já recebeu o limite de " + limitePropostasPorServico
+                                + " propostas. Aguarde o colecionador decidir.");
+            }
+
             throw new RegraDeNegocioException("Outro guincho enviou uma proposta primeiro. Atualize a lista de chamados.");
         }
-
         controleCooldown.registrarPropostaDoGuincho(guincho);
 
         return mapearParaResposta(buscarServicoPorId(idServico));
@@ -571,10 +595,34 @@ public class ServicoGuinchoService {
     }
 
     private ServicoRespostaDTO finalizarSePossivel(UUID idServico) {
-        repositorioServicoGuincho.finalizarSeAmbosConfirmaram(idServico, LocalDateTime.now(),
-                StatusServico.FINALIZADO, StatusServico.CHEGOU);
+        int linhasAfetadas = repositorioServicoGuincho.finalizarSeAmbosConfirmaram(
+                idServico, LocalDateTime.now(), StatusServico.FINALIZADO, StatusServico.CHEGOU);
+
+        if (linhasAfetadas == 1) {
+            ServicoGuincho finalizado = buscarServicoPorId(idServico);
+            atualizarReputacaoDoGuincho(finalizado.getGuincho(), finalizado.getNotaAvaliacaoEntusiasta());
+        }
 
         return mapearParaResposta(buscarServicoPorId(idServico));
+    }
+
+    /**
+     * O agregado de reputacao do guincho (media + quantidade) e
+     * atualizado na CONCLUSAO do servico, na mesma transacao do UPDATE de
+     * finalizacao. A nota do colecionador existe desde o CHEGOU e a conclusao
+     * exige que ela esteja preenchida.
+     */
+    private void atualizarReputacaoDoGuincho(Guincho guincho, Integer nota) {
+        if (guincho == null || nota == null) {
+            return;
+        }
+
+        double mediaAtual = guincho.getNotaMediaPrestador() == null ? 0.0 : guincho.getNotaMediaPrestador();
+        long quantidadeAtual = guincho.getQuantidadeAvaliacoes() == null ? 0L : guincho.getQuantidadeAvaliacoes();
+
+        guincho.setNotaMediaPrestador((mediaAtual * quantidadeAtual + nota) / (quantidadeAtual + 1.0));
+        guincho.setQuantidadeAvaliacoes(quantidadeAtual + 1);
+        repositorioGuincho.save(guincho);
     }
 
     // ==================================================================
@@ -788,14 +836,126 @@ public class ServicoGuinchoService {
         }
     }
 
+    // MATCH: RANKING DE PRESTADORES PARA UM CHAMADO
+    /**
+     * Prestadores compativeis de UM chamado de guincho, para o colecionador.
+     * Elegibilidade = ativo + cota disponivel (corte no SQL). Ordem: notaMatch desc,
+     * notaAjustada desc, distancia asc e, empatando tudo, nome alfabetico.
+     */
+    @Transactional(readOnly = true)
+    public List<PrestadorCompativelDTO> listarPrestadoresCompativeis(ServicoGuincho servico, UUID idEntusiasta) {
+        if (!servico.getEntusiasta().getId().equals(idEntusiasta)) {
+            throw new PerfilIncompativelException("Acesso Negado: Esta solicitação não pertence a você.");
+        }
+
+        List<Guincho> disponiveis = repositorioServicoGuincho.buscarDisponiveisComCota(statusDeServicoAtivo, maximoServicosAtivos);
+
+        long semCoordenadas = disponiveis.stream()
+                .filter(g -> g.getLatitude() == null || g.getLongitude() == null)
+                .count();
+
+        if (semCoordenadas > 0) {
+            log.warn("{} guincho(s) sem coordenadas ficou(aram) de fora do ranking do chamado {}.",
+                    semCoordenadas, servico.getId());
+        }
+
+        return disponiveis.stream()
+                .filter(g -> g.getLatitude() != null && g.getLongitude() != null)
+                .map(g -> mapearGuinchoCompativel(g, servico))
+                .sorted(ordenacaoDosPrestadores())
+                .toList();
+    }
+
+    private PrestadorCompativelDTO mapearGuinchoCompativel(Guincho guincho, ServicoGuincho servico) {
+        Double distanciaKm = DistanciaGeografica.distanciaKm(
+                guincho.getLatitude(), guincho.getLongitude(),
+                servico.getLatitudeAtualEntusiasta(), servico.getLongitudeAtualEntusiasta());
+
+        return new PrestadorCompativelDTO(
+                guincho.getId(),
+                TipoPrestadorServico.GUINCHO,
+                guincho.getNome(),
+                CalculadoraMatch.notaAjustadaArredondada(
+                        guincho.getNotaMediaPrestador(), guincho.getQuantidadeAvaliacoes()),
+                guincho.getQuantidadeAvaliacoes() == null ? 0L : guincho.getQuantidadeAvaliacoes(),
+                distanciaKm,
+                CalculadoraMatch.notaMatch(
+                        guincho.getNotaMediaPrestador(), guincho.getQuantidadeAvaliacoes(), distanciaKm));
+    }
+
+    private Comparator<PrestadorCompativelDTO> ordenacaoDosPrestadores() {
+        return Comparator.comparing(PrestadorCompativelDTO::notaMatch).reversed()
+                .thenComparing(Comparator.comparingDouble(PrestadorCompativelDTO::notaAjustada).reversed())
+                .thenComparing(PrestadorCompativelDTO::distanciaKm)
+                .thenComparing(PrestadorCompativelDTO::nomePrestador);
+    }
+
+    /** UMA consulta para a carga ativa de todos os guinchos da lista (evita N+1). */
+    private Map<UUID, Long> contarAtivosDosGuinchos(List<ServicoGuincho> servicos) {
+        List<UUID> ids = servicos.stream()
+                .map(ServicoGuincho::getGuincho)
+                .filter(Objects::nonNull)
+                .map(Guincho::getId)
+                .distinct()
+                .toList();
+
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<UUID, Long> ativos = new HashMap<>();
+        for (Object[] linha : repositorioServicoGuincho.contarAtivosPorGuincho(ids, statusDeServicoAtivo)) {
+            ativos.put((UUID) linha[0], (Long) linha[1]);
+        }
+
+        return ativos;
+    }
+
     // ==================================================================
     // MAPEAMENTO
     // ==================================================================
 
     private ServicoRespostaDTO mapearParaResposta(ServicoGuincho servico) {
+        return mapearParaResposta(servico, null);
+    }
+
+    private ServicoRespostaDTO mapearParaResposta(ServicoGuincho servico, Map<UUID, Long> ativosPorGuincho) {
         Guincho guincho = servico.getGuincho();
         boolean contatoLiberado = servico.getStatus() != StatusServico.SOLICITADO
                 && servico.getStatus() != StatusServico.PROPOSTA;
+
+        Integer notaMatch = null;
+        Double notaMediaPrestador = null;
+        Long quantidadeAvaliacoes = null;
+        Double distanciaAteOcorrencia = null;
+        Long servicosAtivosDoPrestador = null;
+
+        if (guincho != null) {
+            notaMediaPrestador = CalculadoraMatch.notaAjustadaArredondada(
+                    guincho.getNotaMediaPrestador(), guincho.getQuantidadeAvaliacoes());
+            quantidadeAvaliacoes = guincho.getQuantidadeAvaliacoes() == null ? 0L : guincho.getQuantidadeAvaliacoes();
+
+            Double latitudePrestador = servico.getLatitudeAtualGuincho() != null
+                    ? servico.getLatitudeAtualGuincho() : guincho.getLatitude();
+            Double longitudePrestador = servico.getLongitudeAtualGuincho() != null
+                    ? servico.getLongitudeAtualGuincho() : guincho.getLongitude();
+
+            if (latitudePrestador != null && longitudePrestador != null) {
+                distanciaAteOcorrencia = DistanciaGeografica.distanciaKm(
+                        latitudePrestador, longitudePrestador,
+                        servico.getLatitudeAtualEntusiasta(), servico.getLongitudeAtualEntusiasta());
+
+                notaMatch = CalculadoraMatch.notaMatch(
+                        guincho.getNotaMediaPrestador(), guincho.getQuantidadeAvaliacoes(), distanciaAteOcorrencia);
+            }
+
+            long ativos = (ativosPorGuincho != null)
+                    ? ativosPorGuincho.getOrDefault(guincho.getId(), 0L)
+                    : repositorioServicoGuincho.countByGuincho_IdAndStatusIn(guincho.getId(), statusDeServicoAtivo);
+
+            boolean chamadoOcupaCota = statusDeServicoAtivo.contains(servico.getStatus());
+            servicosAtivosDoPrestador = chamadoOcupaCota ? Math.max(0, ativos - 1) : ativos;
+        }
 
         return new ServicoRespostaDTO(
                 servico.getId(),
@@ -835,21 +995,21 @@ public class ServicoGuinchoService {
                 servico.getDataHoraSolicitacao(),
                 servico.getDataHoraProposta(),
                 servico.getDataHoraPendente(),
-                servico.getDataHoraFinalizacao());
+                servico.getDataHoraFinalizacao(),
+                notaMatch,
+                notaMediaPrestador,
+                quantidadeAvaliacoes,
+                distanciaAteOcorrencia,
+                servicosAtivosDoPrestador);
     }
 
     private ServicoDisponivelDTO mapearParaDisponivel(ServicoGuincho servico, Double distanciaKm) {
         return new ServicoDisponivelDTO(
                 servico.getId(),
-                TipoServico.GUINCHO,
                 servico.getEntusiasta().getNome(),
-                descreverCarro(servico.getCarro()),
-                List.of(),
-                servico.getEnderecoAtualEntusiasta(),
-                servico.getLatitudeAtualEntusiasta(),
-                servico.getLongitudeAtualEntusiasta(),
                 distanciaKm,
-                servico.getDataHoraSolicitacao());
+                List.of(),
+                descreverCarro(servico.getCarro()));
     }
 
     private EnderecoOcorrenciaDTO mapearEnderecoEstruturado(EnderecoOcorrencia endereco) {
@@ -876,13 +1036,18 @@ public class ServicoGuinchoService {
     // ==================================================================
 
     /**
-     * Chamado com a distancia calculada UMA unica vez: o filtro do raio e o sort
-     * reaproveitam o mesmo valor, sem recalcular trigonometria.
+     * Chamado com a distancia calculada UMA unica vez. Ordem do painel
+     * (MATCH): distancia asc -> nome do entusiasta (alfabetico).
      */
     private record ChamadoComDistancia(ServicoGuincho servico, Double distanciaKm) {
 
         boolean dentroDoRaio(double raioKm) {
             return distanciaKm != null && distanciaKm <= raioKm;
         }
+    }
+
+    private Comparator<ChamadoComDistancia> ordenacaoDosChamados() {
+        return Comparator.comparing(ChamadoComDistancia::distanciaKm)
+                .thenComparing(chamado -> chamado.servico().getEntusiasta().getNome());
     }
 }

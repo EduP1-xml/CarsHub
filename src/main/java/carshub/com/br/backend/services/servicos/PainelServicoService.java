@@ -3,6 +3,7 @@ package carshub.com.br.backend.services.servicos;
 import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.models.dtos.servicos.HistoricoManutencaoResponseDTO;
+import carshub.com.br.backend.models.dtos.servicos.PrestadorCompativelDTO;
 import carshub.com.br.backend.models.dtos.servicos.ServicoRespostaDTO;
 import carshub.com.br.backend.models.entities.Carro;
 import carshub.com.br.backend.models.entities.servicos.ServicoGuincho;
@@ -16,14 +17,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Consultas que CRUZAM os dois tipos de servico: o painel padrao de solicitacoes
- * ativas do colecionador e o historico de manutencoes de um veiculo.
+ * ativas do colecionador, o historico de manutencoes de um veiculo e o roteamento
+ * do ranking de prestadores compativeis.
  */
 @Service
 @RequiredArgsConstructor
@@ -102,5 +101,29 @@ public class PainelServicoService {
                 Comparator.nullsLast(Comparator.reverseOrder())));
 
         return historico;
+    }
+
+    /**
+     *
+     * Roteia o ranking para o service certo conforme o TIPO do chamado
+     * (mecanico tem a lista de elegiveis congelada na criacao; guincho usa todos
+     * os ativos). A checagem de dono fica dentro de cada service (403 para quem
+     * nao e o colecionador do chamado).
+     */
+    @Transactional(readOnly = true)
+    public List<PrestadorCompativelDTO> listarPrestadoresCompativeis(UUID idServico, UUID idEntusiasta) {
+        Optional<ServicoMecanico> opcionalServicoMecanico = repositorioServicoMecanico.findById(idServico);
+
+        if (opcionalServicoMecanico.isPresent()) {
+            return servicoMecanico.listarPrestadoresCompativeis(opcionalServicoMecanico.get(), idEntusiasta);
+        }
+
+        Optional<ServicoGuincho> opcionalServicoGuincho = repositorioServicoGuincho.findById(idServico);
+
+        if (opcionalServicoGuincho.isPresent()) {
+            return servicoGuincho.listarPrestadoresCompativeis(opcionalServicoGuincho.get(), idEntusiasta);
+        }
+
+        throw new RecursoNaoEncontradoException("Solicitação de serviço não encontrada.");
     }
 }

@@ -36,7 +36,7 @@ public class ServicoGuinchoController {
             @RequestHeader("user-id") UUID id,
             @RequestParam(name = "somenteAbertos", defaultValue = "true") boolean somenteAbertos,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
-            @RequestParam(name = "tamanho", defaultValue = "20") int tamanho) {
+            @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 
         List<ServicoRespostaDTO> servicos = servicoGuincho.listarMeusServicos(id, somenteAbertos);
         return ResponseEntity.ok(PaginaRespostaDTO.de(servicos, pagina, tamanho));

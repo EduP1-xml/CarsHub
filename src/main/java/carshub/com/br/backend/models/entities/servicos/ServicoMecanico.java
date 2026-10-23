@@ -149,6 +149,14 @@ public class ServicoMecanico {
     @Column(name = "dataHoraPendente_ServicoMecanico")
     private LocalDateTime dataHoraPendente;
 
+    /**
+     * MATCH (regra N14): quantas propostas este chamado ja recebeu ao longo da
+     * vida — teto de 10. Nunca decrementa: rejeitar/expirada so devolve o chamado
+     * para a rede, nao apaga a proposta que existiu.
+     */
+    @Column(name = "quantidadePropostas_ServicoMecanico", nullable = false)
+    private Integer quantidadePropostas = 0;
+
     // ==================================================================
     // EVIDENCIAS: FOTOS
     // ==================================================================

@@ -26,7 +26,7 @@ public class HistoricoManutencaoController {
             @PathVariable UUID idCarro,
             @RequestHeader("user-id") UUID id,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
-            @RequestParam(name = "tamanho", defaultValue = "20") int tamanho) {
+            @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 
         List<HistoricoManutencaoResponseDTO> historico = painelServico.obterHistoricoDoVeiculo(idCarro, id);
         return ResponseEntity.ok(PaginaRespostaDTO.de(historico, pagina, tamanho));
