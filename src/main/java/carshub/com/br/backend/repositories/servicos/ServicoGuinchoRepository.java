@@ -4,6 +4,8 @@ import carshub.com.br.backend.models.entities.Guincho;
 import carshub.com.br.backend.models.entities.servicos.ServicoGuincho;
 import carshub.com.br.backend.models.enums.servicos.StatusServico;
 import carshub.com.br.backend.utils.DistanciaGeografica;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -21,13 +23,20 @@ public interface ServicoGuinchoRepository extends JpaRepository<ServicoGuincho, 
     // LEITURAS
     // ==================================================================
 
+    // AJUSTE 1.1: mesmo espelho do repositorio mecanico — List alimenta o painel
+    // consolidado; Page<T> atende a paginacao nativa das rotas proprias.
+
     List<ServicoGuincho> findAllByEntusiasta_IdOrderByDataHoraSolicitacaoDesc(UUID idEntusiasta);
 
     List<ServicoGuincho> findAllByEntusiasta_IdAndStatusNotOrderByDataHoraSolicitacaoDesc(UUID idEntusiasta, StatusServico status);
 
-    List<ServicoGuincho> findAllByGuincho_IdOrderByDataHoraSolicitacaoDesc(UUID idGuincho);
+    Page<ServicoGuincho> findAllByEntusiasta_IdOrderByDataHoraSolicitacaoDesc(UUID idEntusiasta, Pageable pageable);
 
-    List<ServicoGuincho> findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(UUID idCarro, StatusServico status);
+    Page<ServicoGuincho> findAllByEntusiasta_IdAndStatusNotOrderByDataHoraSolicitacaoDesc(UUID idEntusiasta, StatusServico status, Pageable pageable);
+
+    Page<ServicoGuincho> findAllByGuincho_IdOrderByDataHoraSolicitacaoDesc(UUID idGuincho, Pageable pageable);
+
+    Page<ServicoGuincho> findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(UUID idCarro, StatusServico status, Pageable pageable);
 
     List<ServicoGuincho> findAllByStatusAndDataHoraSolicitacaoBefore(StatusServico status, LocalDateTime limite);
 

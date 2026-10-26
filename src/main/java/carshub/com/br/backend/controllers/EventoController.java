@@ -1,5 +1,6 @@
 package carshub.com.br.backend.controllers;
 
+import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoPatchDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoPutDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRegistroDTO;
@@ -34,10 +35,12 @@ public class EventoController {
     }
 
     @GetMapping
-    public ResponseEntity<List<EventoRespostaDTO>> listarMeusEventos(
-            @RequestHeader("user-id") UUID idOrganizador) {
-        List<EventoRespostaDTO> eventos = servicoEvento.listarMeusEventos(idOrganizador);
-        return ResponseEntity.ok(eventos);
+    public ResponseEntity<PaginaRespostaDTO<EventoRespostaDTO>> listarMeusEventos(
+            @RequestHeader("user-id") UUID idOrganizador,
+            @RequestParam(name = "pagina", defaultValue = "0") int pagina,
+            @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
+        return ResponseEntity.ok(PaginaRespostaDTO.de(
+                servicoEvento.listarMeusEventos(idOrganizador, pagina, tamanho)));
     }
 
     @GetMapping("/{idEvento}")

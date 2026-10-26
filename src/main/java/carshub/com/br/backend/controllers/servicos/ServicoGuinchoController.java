@@ -12,7 +12,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
 import java.util.UUID;
 
 /** Solicitacoes de guincho feitas pelo COLECIONADOR (mesmo fluxo do servico mecanico). */
@@ -38,8 +37,8 @@ public class ServicoGuinchoController {
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 
-        List<ServicoRespostaDTO> servicos = servicoGuincho.listarMeusServicos(id, somenteAbertos);
-        return ResponseEntity.ok(PaginaRespostaDTO.de(servicos, pagina, tamanho));
+        return ResponseEntity.ok(PaginaRespostaDTO.de(
+                servicoGuincho.listarMeusServicos(id, somenteAbertos, pagina, tamanho)));
     }
 
     @GetMapping("/{idServico}")

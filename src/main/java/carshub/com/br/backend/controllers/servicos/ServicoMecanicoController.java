@@ -12,12 +12,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
  * Solicitacoes de servico mecanico feitas pelo COLECIONADOR.
- *
  * Fluxo de estados atendido por estas rotas:
  *   POST ""                     -> SOLICITADO
  *   POST /{id}/foto-inicial     -> evidencia do estado do veiculo (PENDENTE)
@@ -48,8 +46,8 @@ public class ServicoMecanicoController {
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 
-        List<ServicoRespostaDTO> servicos = servicoMecanico.listarMeusServicos(id, somenteAbertos);
-        return ResponseEntity.ok(PaginaRespostaDTO.de(servicos, pagina, tamanho));
+        return ResponseEntity.ok(PaginaRespostaDTO.de(
+                servicoMecanico.listarMeusServicos(id, somenteAbertos, pagina, tamanho)));
     }
 
     @GetMapping("/{idServico}")

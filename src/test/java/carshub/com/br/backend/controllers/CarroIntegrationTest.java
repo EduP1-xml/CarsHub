@@ -81,7 +81,9 @@ class CarroIntegrationTest extends TesteIntegracaoBase {
 
         mockMvc.perform(get(BASE).header("user-id", entusiasta.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1));
+                // AJUSTE 1.1: a garagem agora devolve o envelope PaginaRespostaDTO.
+                .andExpect(jsonPath("$.conteudo.length()").value(1))
+                .andExpect(jsonPath("$.totalElementos").value(1));
 
         mockMvc.perform(get(BASE + "/{id}", idCarro).header("user-id", entusiasta.getId()))
                 .andExpect(status().isOk())

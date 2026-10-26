@@ -50,7 +50,8 @@ public class PainelMecanicoController {
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 
-        return ResponseEntity.ok(PaginaRespostaDTO.de(servicoMecanico.listarMinhaFilaDeTrabalho(id), pagina, tamanho));
+        return ResponseEntity.ok(PaginaRespostaDTO.de(
+                servicoMecanico.listarMinhaFilaDeTrabalho(id, pagina, tamanho)));
     }
 
     @GetMapping("/{idServico}")

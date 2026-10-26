@@ -81,6 +81,11 @@ public class Evento {
     @Column(name = "status_Evento", nullable = false)
     private StatusEvento status = StatusEvento.ATIVO;
 
+    /** AJUSTE 1.3: travamento otimista, como nos Servico*. Conflito de escrita -> 409. */
+    @Version
+    @Column(name = "versao_Evento")
+    private Long versao;
+
     @NotNull(message = "É necessário ter um organizador vinculado para criar um evento")
     @ManyToOne(optional = false)
     @JoinColumn(name = "organizadorEvento_Evento", referencedColumnName = "id_Usuario", nullable = false)

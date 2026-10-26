@@ -47,7 +47,12 @@ public class ServicoGuincho {
     @Column(name = "versao_ServicoGuincho")
     private Long versao;
 
-    /** Chave de idempotencia (decisao D5); zerada quando o servico e finalizado. */
+    /**
+     * Idempotencia (D5). AJUSTE 1.4 (decisao do time): a coluna e ANULAVEL
+     * porque o UPDATE de FINALIZACAO zera a chave — nunca porque a solicitacao
+     * possa nascer sem ela. Uma nova solicitacao identica (mesmo colecionador e
+     * carro) so volta a ser aceita depois que a anterior for FINALIZADA.
+     */
     @Column(name = "chaveIdempotencia_ServicoGuincho", length = 64, unique = true)
     private String chaveIdempotencia;
 

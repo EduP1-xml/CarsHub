@@ -3,6 +3,7 @@ package carshub.com.br.backend.services;
 import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.exceptions.RegraDeNegocioException;
+import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoPatchDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoPutDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRegistroDTO;
@@ -17,6 +18,7 @@ import carshub.com.br.backend.services.file.FileStorageService;
 import carshub.com.br.backend.services.geocodificacao.GeocodificacaoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -25,7 +27,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * CRUD do evento pelo organizador.
@@ -82,14 +83,20 @@ public class EventoService {
         return mapearEntidadeParaResponse(eventoSalvo);
     }
 
-    public List<EventoRespostaDTO> listarMeusEventos(UUID idOrganizador) {
+    /**
+     * AJUSTE 1.1: meus eventos paginados NATIVO (Page no SQL), do mais recente
+     * (data de inicio) para o mais antigo.
+     */
+    @Transactional(readOnly = true)
+    public Page<EventoRespostaDTO> listarMeusEventos(UUID idOrganizador, int pagina, int tamanho) {
         if (!repositorioOrganizador.existsById(idOrganizador)) {
             throw new RecursoNaoEncontradoException("Sessão inválida.");
         }
 
-        return repositorioEvento.findAllByOrganizadorEvento_Id(idOrganizador).stream()
-                .map(this::mapearEntidadeParaResponse)
-                .collect(Collectors.toList());
+        return repositorioEvento
+                .findAllByOrganizadorEvento_IdOrderByDataHoraInicioDesc(
+                        idOrganizador, PaginaRespostaDTO.pageRequest(pagina, tamanho))
+                .map(this::mapearEntidadeParaResponse);
     }
 
     public EventoRespostaDTO buscarMeuEventoPorId(UUID idEvento, UUID idOrganizador) {
@@ -192,7 +199,6 @@ public class EventoService {
 
     /**
      * Traduz o endereco digitado pelo organizador em coordenadas para o pino do mapa.
-     *
      * BLOQUEANTE: endereco nao encontrado -> EnderecoNaoEncontradoException (422);
      * servico de mapas fora/timeout/sem chave -> 503/504/502. Se voce preferir que o
      * evento seja salvo mesmo sem pino, envolva o corpo num try/catch e logue WARN

@@ -4,6 +4,7 @@ import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.exceptions.RegraDeNegocioException;
 import carshub.com.br.backend.exceptions.SolicitacaoDuplicadaException;
+import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.geocodificacao.LocalizacaoGeocodificadaDTO;
 import carshub.com.br.backend.models.dtos.servicos.AvaliacaoServicoDTO;
 import carshub.com.br.backend.models.dtos.servicos.EnderecoOcorrenciaDTO;
@@ -30,6 +31,8 @@ import carshub.com.br.backend.utils.DistanciaGeografica;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -46,7 +49,7 @@ import java.util.UUID;
 /**
  * Maquina de estados do servico de guincho:
  * SOLICITADO -> PROPOSTA -> PENDENTE -> CHEGOU -> FINALIZADO.
- *
+
  * REGRAS DESTA CLASSE:
  *  - transicoes criticas por UPDATE condicional (guarda de estado atomica);
  *  - idempotencia: chave unica por colecionador+carro, liberada ao finalizar;
@@ -56,7 +59,7 @@ import java.util.UUID;
  *  - evidencias: foto inicial, chegada confirmada pelos dois, foto final de cada
  *    lado, avaliacao mutua e conclusao confirmada pelos dois;
  *  - cancelamento: SOLICITADO/PROPOSTA na hora; PENDENTE somente apos 2 horas.
- *
+
  * Nao existe compatibilidade de servicos no guincho: o painel lista todos os
  * chamados SOLICITADO dentro do raio (quem tem lista de elegiveis e o mecanico).
  */
@@ -130,6 +133,7 @@ public class ServicoGuinchoService {
         return mapearParaResposta(servicoSalvo);
     }
 
+    //Versão para o painel consolidado.
     @Transactional(readOnly = true)
     public List<ServicoRespostaDTO> listarMeusServicos(UUID idEntusiasta, boolean somenteAbertos) {
         buscarEntusiastaOuLancarExcecao(idEntusiasta);
@@ -143,6 +147,24 @@ public class ServicoGuinchoService {
         return servicos.stream()
                 .map(servico -> mapearParaResposta(servico, ativosPorGuincho))
                 .toList();
+    }
+
+    //Versao paginada NATIVA (Page no SQL).
+    @Transactional(readOnly = true)
+    public Page<ServicoRespostaDTO> listarMeusServicos(UUID idEntusiasta, boolean somenteAbertos, int pagina, int tamanho) {
+        buscarEntusiastaOuLancarExcecao(idEntusiasta);
+
+        PageRequest pageRequest = PaginaRespostaDTO.pageRequest(pagina, tamanho);
+
+        Page<ServicoGuincho> paginaDeServicos = somenteAbertos
+                ? repositorioServicoGuincho.findAllByEntusiasta_IdAndStatusNotOrderByDataHoraSolicitacaoDesc(
+                idEntusiasta, StatusServico.FINALIZADO, pageRequest)
+                : repositorioServicoGuincho.findAllByEntusiasta_IdOrderByDataHoraSolicitacaoDesc(
+                idEntusiasta, pageRequest);
+
+        Map<UUID, Long> ativosPorGuincho = contarAtivosDosGuinchos(paginaDeServicos.getContent());
+
+        return paginaDeServicos.map(servico -> mapearParaResposta(servico, ativosPorGuincho));
     }
 
     @Transactional(readOnly = true)
@@ -209,7 +231,7 @@ public class ServicoGuinchoService {
     // EVIDENCIAS: FOTO INICIAL
     // ==================================================================
 
-    /** Foto do veiculo antes do servico. Pode ser substituida enquanto PENDENTE. */
+    /** AJUSTE 1.4: foto inicial IMUTAVEL — depois de enviada, nao pode ser substituida. */
     @Transactional
     public ServicoRespostaDTO enviarFotoInicial(UUID idServico, UUID idEntusiasta, MultipartFile arquivo) {
         ServicoGuincho servico = buscarServicoDoEntusiasta(idServico, idEntusiasta);
@@ -217,6 +239,11 @@ public class ServicoGuinchoService {
         if (servico.getStatus() != StatusServico.PENDENTE) {
             throw new RegraDeNegocioException(
                     "A foto inicial é enviada depois do aceite da proposta (PENDENTE).");
+        }
+
+        if (servico.getUrlFotoInicial() != null) {
+            throw new RegraDeNegocioException(
+                    "A foto inicial já foi enviada e não pode ser substituída.");
         }
 
         servico.setUrlFotoInicial(salvarFoto(arquivo, "a foto inicial do veículo"));
@@ -416,6 +443,8 @@ public class ServicoGuinchoService {
             return List.of();
         }
 
+        // AJUSTE 1.5: notaMatch calculada na leitura, com as coordenadas do
+        // PERFIL do guincho; a ordenacao continua por distancia.
         return repositorioServicoGuincho.buscarPorIds(idsCandidatos)
                 .stream()
                 .map(servico -> {
@@ -429,21 +458,23 @@ public class ServicoGuinchoService {
                 })
                 .filter(chamado -> chamado.dentroDoRaio(raio))
                 .sorted(ordenacaoDosChamados())
-                .map(chamado -> mapearParaDisponivel(chamado.servico(), chamado.distanciaKm()))
+                .map(chamado -> mapearParaDisponivel(
+                        chamado.servico(), chamado.distanciaKm(), notaMatchDoChamadoPara(guincho, chamado.servico())))
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<ServicoRespostaDTO> listarMinhaFilaDeTrabalho(UUID idGuincho) {
+    public Page<ServicoRespostaDTO> listarMinhaFilaDeTrabalho(UUID idGuincho, int pagina, int tamanho) {
         buscarEValidarGuincho(idGuincho);
+
+        Page<ServicoGuincho> paginaDeServicos = repositorioServicoGuincho
+                .findAllByGuincho_IdOrderByDataHoraSolicitacaoDesc(
+                        idGuincho, PaginaRespostaDTO.pageRequest(pagina, tamanho));
 
         Map<UUID, Long> ativosPorGuincho = Map.of(
                 idGuincho, repositorioServicoGuincho.countByGuincho_IdAndStatusIn(idGuincho, statusDeServicoAtivo));
 
-        return repositorioServicoGuincho.findAllByGuincho_IdOrderByDataHoraSolicitacaoDesc(idGuincho)
-                .stream()
-                .map(servico -> mapearParaResposta(servico, ativosPorGuincho))
-                .toList();
+        return paginaDeServicos.map(servico -> mapearParaResposta(servico, ativosPorGuincho));
     }
 
     @Transactional
@@ -1003,13 +1034,32 @@ public class ServicoGuinchoService {
                 servicosAtivosDoPrestador);
     }
 
-    private ServicoDisponivelDTO mapearParaDisponivel(ServicoGuincho servico, Double distanciaKm) {
+    private ServicoDisponivelDTO mapearParaDisponivel(ServicoGuincho servico, Double distanciaKm, Integer notaMatch) {
         return new ServicoDisponivelDTO(
                 servico.getId(),
                 servico.getEntusiasta().getNome(),
                 distanciaKm,
                 List.of(),
-                descreverCarro(servico.getCarro()));
+                descreverCarro(servico.getCarro()),
+                notaMatch);
+    }
+
+    /**
+     * AJUSTE 1.5: score do par (prestador, chamado) calculado na LEITURA, com as
+     * coordenadas do PERFIL do guincho e a reputacao dele. Sem coordenadas no
+     * perfil -> null (sem distancia nao existe match), sem punir o chamado.
+     */
+    private Integer notaMatchDoChamadoPara(Guincho guincho, ServicoGuincho servico) {
+        if (guincho.getLatitude() == null || guincho.getLongitude() == null) {
+            return null;
+        }
+
+        Double distanciaDoPrestador = DistanciaGeografica.distanciaKm(
+                guincho.getLatitude(), guincho.getLongitude(),
+                servico.getLatitudeAtualEntusiasta(), servico.getLongitudeAtualEntusiasta());
+
+        return CalculadoraMatch.notaMatch(
+                guincho.getNotaMediaPrestador(), guincho.getQuantidadeAvaliacoes(), distanciaDoPrestador);
     }
 
     private EnderecoOcorrenciaDTO mapearEnderecoEstruturado(EnderecoOcorrencia endereco) {

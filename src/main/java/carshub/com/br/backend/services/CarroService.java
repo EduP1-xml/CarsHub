@@ -3,6 +3,7 @@ package carshub.com.br.backend.services;
 import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.PlacaJaCadastradaException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
+import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroPatchDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRegistroDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRespostaDTO;
@@ -12,6 +13,7 @@ import carshub.com.br.backend.repositories.CarroRepository;
 import carshub.com.br.backend.repositories.EntusiastaRepository;
 import carshub.com.br.backend.services.file.FileStorageService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -63,17 +65,22 @@ public class CarroService {
         return mapearEntidadeParaResponse(carroSalvo, proprietario.getNome());
     }
 
-    public List<CarroRespostaDTO> listarCarrosDoColecionador(UUID entusiastaId) {
+    /**
+     * Garagem paginada NATIVA (Page no SQL). Deixou de carregar a
+     * colecao lazy inteira do colecionador. Garagem vazia devolve Page vazio.
+     * AJUSTE 1.1b: projecao de escalares — o SQL devolve o DTO pronto.
+     */
+    @Transactional(readOnly = true)
+    public Page<CarroRespostaDTO> listarCarrosDoColecionador(UUID entusiastaId, int pagina, int tamanho) {
         Entusiasta proprietario = entusiastaRepository.findById(entusiastaId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida."));
 
         if (proprietario.getColecionador() == null) {
-            return List.of();
+            return Page.empty(PaginaRespostaDTO.pageRequest(pagina, tamanho));
         }
 
-        return proprietario.getColecionador().getCarros().stream()
-                .map(carro -> mapearEntidadeParaResponse(carro, proprietario.getNome()))
-                .collect(Collectors.toList());
+        return carroRepository.projetarGaragemDoColecionador(
+                proprietario.getColecionador().getId(), PaginaRespostaDTO.pageRequest(pagina, tamanho));
     }
 
     public CarroRespostaDTO buscarCarroPorId(UUID carroId, UUID entusiastaId) {

@@ -2,6 +2,7 @@ package carshub.com.br.backend.services.servicos;
 
 import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
+import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.servicos.HistoricoManutencaoResponseDTO;
 import carshub.com.br.backend.models.dtos.servicos.PrestadorCompativelDTO;
 import carshub.com.br.backend.models.dtos.servicos.ServicoRespostaDTO;
@@ -14,6 +15,8 @@ import carshub.com.br.backend.repositories.CarroRepository;
 import carshub.com.br.backend.repositories.servicos.ServicoGuinchoRepository;
 import carshub.com.br.backend.repositories.servicos.ServicoMecanicoRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,11 +54,15 @@ public class PainelServicoService {
     }
 
     /**
-     * Historico de manutencoes oficial do veiculo: todos os servicos mecanicos e
-     * guinchos FINALIZADOS daquele carro, do mais recente para o mais antigo.
+     * AJUSTE 1.1: historico paginado. As DUAS consultas sao paginadas no SQL
+     * (mecanico e guincho separados) e a mesclagem por data acontece em Java com
+     * a tecnica da JANELA: trazemos de cada fonte os primeiros
+     * (pagina + 1) * tamanho itens, o suficiente para reconstruir com exatidao o
+     * recorte de qualquer pagina da lista unificada.
      */
     @Transactional(readOnly = true)
-    public List<HistoricoManutencaoResponseDTO> obterHistoricoDoVeiculo(UUID idCarro, UUID idEntusiasta) {
+    public PaginaRespostaDTO<HistoricoManutencaoResponseDTO> obterHistoricoDoVeiculo(
+            UUID idCarro, UUID idEntusiasta, int pagina, int tamanho) {
         if (idCarro == null) {
             throw new IllegalArgumentException("O ID do carro é obrigatório para consultar o histórico.");
         }
@@ -67,12 +74,18 @@ public class PainelServicoService {
             throw new PerfilIncompativelException("Acesso Negado: Este veículo não pertence à sua coleção.");
         }
 
+        PageRequest pageRequest = PaginaRespostaDTO.pageRequest(pagina, tamanho);
+        PageRequest janela = PageRequest.of(0, (pageRequest.getPageNumber() + 1) * pageRequest.getPageSize());
+
+        Page<ServicoMecanico> paginaMecanicos = repositorioServicoMecanico
+                .findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(idCarro, StatusServico.FINALIZADO, janela);
+
+        Page<ServicoGuincho> paginaGuinchos = repositorioServicoGuincho
+                .findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(idCarro, StatusServico.FINALIZADO, janela);
+
         List<HistoricoManutencaoResponseDTO> historico = new ArrayList<>();
 
-        List<ServicoMecanico> servicosMecanicos = repositorioServicoMecanico
-                .findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(idCarro, StatusServico.FINALIZADO);
-
-        for (ServicoMecanico servico : servicosMecanicos) {
+        for (ServicoMecanico servico : paginaMecanicos.getContent()) {
             historico.add(new HistoricoManutencaoResponseDTO(
                     servico.getId(),
                     TipoServico.MECANICO,
@@ -83,10 +96,7 @@ public class PainelServicoService {
                     servico.getDataHoraFinalizacao()));
         }
 
-        List<ServicoGuincho> servicosGuincho = repositorioServicoGuincho
-                .findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(idCarro, StatusServico.FINALIZADO);
-
-        for (ServicoGuincho servico : servicosGuincho) {
+        for (ServicoGuincho servico : paginaGuinchos.getContent()) {
             historico.add(new HistoricoManutencaoResponseDTO(
                     servico.getId(),
                     TipoServico.GUINCHO,
@@ -100,7 +110,14 @@ public class PainelServicoService {
         historico.sort(Comparator.comparing(HistoricoManutencaoResponseDTO::dataHoraFinalizacao,
                 Comparator.nullsLast(Comparator.reverseOrder())));
 
-        return historico;
+        int inicio = pageRequest.getPageNumber() * pageRequest.getPageSize();
+        int fim = Math.min(inicio + pageRequest.getPageSize(), historico.size());
+        List<HistoricoManutencaoResponseDTO> recorte =
+                (inicio >= historico.size()) ? List.of() : historico.subList(inicio, fim);
+
+        long total = paginaMecanicos.getTotalElements() + paginaGuinchos.getTotalElements();
+
+        return PaginaRespostaDTO.de(recorte, total, pageRequest.getPageNumber(), pageRequest.getPageSize());
     }
 
     /**

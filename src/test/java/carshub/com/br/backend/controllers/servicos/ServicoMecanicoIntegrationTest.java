@@ -88,7 +88,7 @@ class ServicoMecanicoIntegrationTest extends TesteIntegracaoBase {
 
         UUID idServico = abrirChamado(colecionador, carro);
 
-        // Painel do prestador: chamado visivel, ordenado por distancia e SEM notaMatch
+        // Painel do prestador: chamado visivel, ordenado por distancia e COM notaMatch (ajuste 1.5)
         mockMvc.perform(get(BASE_MECANICO + "/disponiveis")
                         .header("user-id", mecanico.getId())
                         .param("latitude", String.valueOf(LATITUDE_PADRAO))
@@ -96,7 +96,7 @@ class ServicoMecanicoIntegrationTest extends TesteIntegracaoBase {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.conteudo[*].idServico")
                         .value(org.hamcrest.Matchers.hasItem(idServico.toString())))
-                .andExpect(jsonPath("$.conteudo[0].notaMatch").doesNotExist())
+                .andExpect(jsonPath("$.conteudo[0].notaMatch").isNumber())
                 .andExpect(jsonPath("$.conteudo[0].nomeEntusiasta").isNotEmpty())
                 .andExpect(jsonPath("$.conteudo[0].distanciaKm").isNumber())
                 .andExpect(jsonPath("$.conteudo[0].carroDescricao").isNotEmpty());

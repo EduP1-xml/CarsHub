@@ -72,8 +72,9 @@ class EventoInscricaoIntegrationTest extends TesteIntegracaoBase {
 
     private com.fasterxml.jackson.databind.JsonNode encontrarEventoNo(MvcResult resposta, UUID idEvento)
             throws Exception {
+        // AJUSTE 1.1: o catalogo agora devolve o envelope PaginaRespostaDTO.
         for (com.fasterxml.jackson.databind.JsonNode e
-                : objectMapper.readTree(resposta.getResponse().getContentAsString())) {
+                : objectMapper.readTree(resposta.getResponse().getContentAsString()).get("conteudo")) {
             if (e.get("idEvento").asText().equals(idEvento.toString())) {
                 return e;
             }
@@ -87,7 +88,7 @@ class EventoInscricaoIntegrationTest extends TesteIntegracaoBase {
         String sufixo = sufixoUnico();
         UUID idEvento = criarEvento(2);
 
-        MvcResult catalogo = mockMvc.perform(get("/api/carshub/eventos"))
+        MvcResult catalogo = mockMvc.perform(get("/api/carshub/eventos").param("tamanho", "1000"))
                 .andExpect(status().isOk())
                 .andReturn();
         com.fasterxml.jackson.databind.JsonNode nossoEvento = encontrarEventoNo(catalogo, idEvento);
@@ -111,7 +112,8 @@ class EventoInscricaoIntegrationTest extends TesteIntegracaoBase {
                 .andExpect(status().isUnprocessableEntity());
 
         // Catalogo agora marca inscrito=true
-        MvcResult catalogoInscrito = mockMvc.perform(get("/api/carshub/eventos").header("user-id", entusiasta.getId()))
+        MvcResult catalogoInscrito = mockMvc.perform(get("/api/carshub/eventos")
+                        .header("user-id", entusiasta.getId()).param("tamanho", "1000"))
                 .andExpect(status().isOk())
                 .andReturn();
         com.fasterxml.jackson.databind.JsonNode eventoInscrito = encontrarEventoNo(catalogoInscrito, idEvento);

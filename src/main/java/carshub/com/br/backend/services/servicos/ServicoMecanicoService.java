@@ -4,6 +4,7 @@ import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.exceptions.RegraDeNegocioException;
 import carshub.com.br.backend.exceptions.SolicitacaoDuplicadaException;
+import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.geocodificacao.LocalizacaoGeocodificadaDTO;
 import carshub.com.br.backend.models.dtos.servicos.AvaliacaoServicoDTO;
 import carshub.com.br.backend.models.dtos.servicos.EnderecoOcorrenciaDTO;
@@ -32,6 +33,8 @@ import carshub.com.br.backend.utils.DistanciaGeografica;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -139,6 +142,7 @@ public class ServicoMecanicoService {
         return mapearParaResposta(servicoSalvo);
     }
 
+    //A versao em List so para o painel consolidado, que mescla mecanico + guincho em Java.
     @Transactional(readOnly = true)
     public List<ServicoRespostaDTO> listarMeusServicos(UUID idEntusiasta, boolean somenteAbertos) {
         buscarEntusiastaOuLancarExcecao(idEntusiasta);
@@ -148,10 +152,30 @@ public class ServicoMecanicoService {
                 : repositorioServicoMecanico.findAllByEntusiasta_IdOrderByDataHoraSolicitacaoDesc(idEntusiasta);
 
         Map<UUID, Long> ativosPorMecanico = contarAtivosDosMecanicos(servicos);
+        Map<UUID, Long> elegiveisPorServico = contarElegiveisDosServicos(servicos);
 
         return servicos.stream()
-                .map(servico -> mapearParaResposta(servico, ativosPorMecanico))
+                .map(servico -> mapearParaResposta(servico, ativosPorMecanico, elegiveisPorServico))
                 .toList();
+    }
+
+    //Versao paginada NATIVA (Page no SQL) usada pelo controller /servicos/mecanicos.
+    @Transactional(readOnly = true)
+    public Page<ServicoRespostaDTO> listarMeusServicos(UUID idEntusiasta, boolean somenteAbertos, int pagina, int tamanho) {
+        buscarEntusiastaOuLancarExcecao(idEntusiasta);
+
+        PageRequest pageRequest = PaginaRespostaDTO.pageRequest(pagina, tamanho);
+
+        Page<ServicoMecanico> paginaDeServicos = somenteAbertos
+                ? repositorioServicoMecanico.findAllByEntusiasta_IdAndStatusNotOrderByDataHoraSolicitacaoDesc(
+                idEntusiasta, StatusServico.FINALIZADO, pageRequest)
+                : repositorioServicoMecanico.findAllByEntusiasta_IdOrderByDataHoraSolicitacaoDesc(
+                idEntusiasta, pageRequest);
+
+        Map<UUID, Long> ativosPorMecanico = contarAtivosDosMecanicos(paginaDeServicos.getContent());
+        Map<UUID, Long> elegiveisPorServico = contarElegiveisDosServicos(paginaDeServicos.getContent());
+
+        return paginaDeServicos.map(servico -> mapearParaResposta(servico, ativosPorMecanico, elegiveisPorServico));
     }
 
     @Transactional(readOnly = true)
@@ -219,7 +243,7 @@ public class ServicoMecanicoService {
     // EVIDENCIAS: FOTO INICIAL
     // ==================================================================
 
-    /** Foto do veiculo antes do servico. Pode ser substituida enquanto PENDENTE. */
+    /** AJUSTE 1.4: foto inicial IMUTAVEL — depois de enviada, nao pode ser substituida. */
     @Transactional
     public ServicoRespostaDTO enviarFotoInicial(UUID idServico, UUID idEntusiasta, MultipartFile arquivo) {
         ServicoMecanico servico = buscarServicoDoEntusiasta(idServico, idEntusiasta);
@@ -227,6 +251,11 @@ public class ServicoMecanicoService {
         if (servico.getStatus() != StatusServico.PENDENTE) {
             throw new RegraDeNegocioException(
                     "A foto inicial é enviada depois do aceite da proposta (PENDENTE).");
+        }
+
+        if (servico.getUrlFotoInicial() != null) {
+            throw new RegraDeNegocioException(
+                    "A foto inicial já foi enviada e não pode ser substituída.");
         }
 
         servico.setUrlFotoInicial(salvarFoto(arquivo, "a foto inicial do veículo"));
@@ -426,8 +455,8 @@ public class ServicoMecanicoService {
         }
 
         // 2) Elegibilidade em JPQL (UUID tipado); Haversine, corte do raio e
-        //    ordenacao por distancia em Java. Sem notaMatch aqui: o painel do
-        //    prestador so mostra as informacoes do chamado (decisao de produto).
+        //    ordenacao por distancia em Java. AJUSTE 1.5: a notaMatch voltou ao
+        //    painel como INFORMACAO (calculada na leitura, sem reordenar).
         return repositorioServicoMecanico.buscarPorIdsElegiveis(idsCandidatos, mecanico.getId())
                 .stream()
                 .map(servico -> {
@@ -441,22 +470,26 @@ public class ServicoMecanicoService {
                 })
                 .filter(chamado -> chamado.dentroDoRaio(raio))
                 .sorted(ordenacaoDosChamados())
-                .map(chamado -> mapearParaDisponivel(chamado.servico(), chamado.distanciaKm()))
+                .map(chamado -> mapearParaDisponivel(
+                        chamado.servico(), chamado.distanciaKm(), notaMatchDoChamadoPara(mecanico, chamado.servico())))
                 .toList();
     }
     // ==================================================================
 
     @Transactional(readOnly = true)
-    public List<ServicoRespostaDTO> listarMinhaFilaDeTrabalho(UUID idMecanico) {
+    public Page<ServicoRespostaDTO> listarMinhaFilaDeTrabalho(UUID idMecanico, int pagina, int tamanho) {
         buscarEValidarMecanico(idMecanico);
+
+        Page<ServicoMecanico> paginaDeServicos = repositorioServicoMecanico
+                .findAllByMecanico_IdOrderByDataHoraSolicitacaoDesc(
+                        idMecanico, PaginaRespostaDTO.pageRequest(pagina, tamanho));
 
         Map<UUID, Long> ativosPorMecanico = Map.of(
                 idMecanico, repositorioServicoMecanico.countByMecanico_IdAndStatusIn(idMecanico, statusDeServicoAtivo));
 
-        return repositorioServicoMecanico.findAllByMecanico_IdOrderByDataHoraSolicitacaoDesc(idMecanico)
-                .stream()
-                .map(servico -> mapearParaResposta(servico, ativosPorMecanico))
-                .toList();
+        Map<UUID, Long> elegiveisPorServico = contarElegiveisDosServicos(paginaDeServicos.getContent());
+
+        return paginaDeServicos.map(servico -> mapearParaResposta(servico, ativosPorMecanico, elegiveisPorServico));
     }
 
     @Transactional
@@ -982,19 +1015,44 @@ public class ServicoMecanicoService {
 
         return ativos;
     }
+
+    /**
+     * AJUSTE 1.1c: contagem de elegiveis em UMA consulta (GROUP BY). A colecao
+     * mecanicosElegiveis so entrava no DTO por .size() — contar no banco evita
+     * hidratar entidades Mecanico inteiras nas listagens.
+     */
+    private Map<UUID, Long> contarElegiveisDosServicos(List<ServicoMecanico> servicos) {
+        if (servicos.isEmpty()) {
+            return Map.of();
+        }
+
+        List<UUID> ids = servicos.stream().map(ServicoMecanico::getId).toList();
+
+        Map<UUID, Long> contagens = new HashMap<>();
+        for (Object[] linha : repositorioServicoMecanico.contarElegiveisPorServico(ids)) {
+            contagens.put((UUID) linha[0], (Long) linha[1]);
+        }
+
+        return contagens;
+    }
     // ==================================================================
     // MAPEAMENTO
     // ==================================================================
 
     private ServicoRespostaDTO mapearParaResposta(ServicoMecanico servico) {
-        return mapearParaResposta(servico, null);
+        return mapearParaResposta(servico, null, null);
     }
 
     /**
      * ativosPorMecanico: carga ativa levantada em UMA consulta para as LISTAGENS
      * (evita N+1). Quando null (chamado unico), a carga e consultada pontualmente.
+     *
+     * elegiveisPorServico (AJUSTE 1.1c): contagem de mecanicosElegiveis vinda do
+     * GROUP BY por servico — a colecao so entrava no DTO por .size(). Quando null
+     * (chamado unico), a contagem e a propria colecao carregada na sessao.
      */
-    private ServicoRespostaDTO mapearParaResposta(ServicoMecanico servico, Map<UUID, Long> ativosPorMecanico) {
+    private ServicoRespostaDTO mapearParaResposta(ServicoMecanico servico, Map<UUID, Long> ativosPorMecanico,
+                                                  Map<UUID, Long> elegiveisPorServico) {
         Mecanico mecanico = servico.getMecanico();
         boolean contatoLiberado = servico.getStatus() != StatusServico.SOLICITADO
                 && servico.getStatus() != StatusServico.PROPOSTA;
@@ -1046,7 +1104,9 @@ public class ServicoMecanicoService {
                 servico.getCarro().getId(),
                 descreverCarro(servico.getCarro()),
                 new ArrayList<>(servico.getServicos()),
-                servico.getMecanicosElegiveis().size(),
+                (elegiveisPorServico != null)
+                        ? elegiveisPorServico.getOrDefault(servico.getId(), 0L).intValue()
+                        : servico.getMecanicosElegiveis().size(),
                 servico.getLatitudeAtualEntusiasta(),
                 servico.getLongitudeAtualEntusiasta(),
                 servico.getEnderecoAtualEntusiasta(),
@@ -1078,13 +1138,32 @@ public class ServicoMecanicoService {
                 servicosAtivosDoPrestador);
     }
 
-    private ServicoDisponivelDTO mapearParaDisponivel(ServicoMecanico servico, Double distanciaKm) {
+    private ServicoDisponivelDTO mapearParaDisponivel(ServicoMecanico servico, Double distanciaKm, Integer notaMatch) {
         return new ServicoDisponivelDTO(
                 servico.getId(),
                 servico.getEntusiasta().getNome(),
                 distanciaKm,
                 new ArrayList<>(servico.getServicos()),
-                descreverCarro(servico.getCarro()));
+                descreverCarro(servico.getCarro()),
+                notaMatch);
+    }
+
+    /**
+     * AJUSTE 1.5: score do par (prestador, chamado) calculado na LEITURA, com as
+     * coordenadas do PERFIL do mecanico e a reputacao dele. Sem coordenadas no
+     * perfil -> null (sem distancia nao existe match), sem punir o chamado.
+     */
+    private Integer notaMatchDoChamadoPara(Mecanico mecanico, ServicoMecanico servico) {
+        if (mecanico.getLatitude() == null || mecanico.getLongitude() == null) {
+            return null;
+        }
+
+        Double distanciaDoPrestador = DistanciaGeografica.distanciaKm(
+                mecanico.getLatitude(), mecanico.getLongitude(),
+                servico.getLatitudeAtualEntusiasta(), servico.getLongitudeAtualEntusiasta());
+
+        return CalculadoraMatch.notaMatch(
+                mecanico.getNotaMediaPrestador(), mecanico.getQuantidadeAvaliacoes(), distanciaDoPrestador);
     }
 
     private EnderecoOcorrenciaDTO mapearEnderecoEstruturado(EnderecoOcorrencia endereco) {

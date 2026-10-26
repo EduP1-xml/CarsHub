@@ -35,6 +35,9 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        # AJUSTE 1.2: hidrata as colecoes LAZY em lotes de 10 registros do tipo.
+        # Com 5 registros por pagina, a consulta extra so ocorre a cada 2 paginas.
+        default_batch_fetch_size: 10
 
 app:
   upload:

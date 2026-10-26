@@ -1,14 +1,26 @@
 package carshub.com.br.backend.models.dtos;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+
 import java.util.List;
 
 /**
- * Envelope unico de paginacao da API (decisao D3).
- *
- * Usamos envelope proprio em vez do Page<T> do Spring para o contrato do JSON
- * ficar estavel (o Page carrega metadados internos que mudam entre versoes) e
- * para servir tanto as listas paginadas no banco quanto as que sao ordenadas em
- * memoria (painel por distancia).
+ *O que tinha dados fixos para referencia foi paginado no SQL, o que precisava de regras de
+ * negócio presentes no Java, paginaram em memória.
+
+ * Envelope unico de paginacao da API.
+ * As listagens ordenaveis no banco passaram a usar o Page<T>
+ * NATIVO do Spring Data — a consulta ja nasce paginada no SQL e o envelope
+ * continua sendo o contrato do JSON (o Page carrega metadados internos que
+ * mudam entre versoes).
+
+ * As listas ordenadas em Java (painel por distancia/score e o painel
+ * consolidado do colecionador) continuam no corte em memoria do factory
+ * de(List, pagina, tamanho);
+ * As listas MESCLADAS de duas consultas paginadas
+ * (historico do veiculo, dashboard do organizador) usam o factory
+ * de(List, totalElementos, pagina, tamanho).
  *
  * @param conteudo      itens da pagina atual
  * @param pagina        numero da pagina (base 0)
@@ -42,5 +54,44 @@ public record PaginaRespostaDTO<T>(
                 total,
                 totalPaginas,
                 paginaSegura >= totalPaginas - 1);
+    }
+
+    /** Paginacao NATIVA: converte o Page<T> do Spring Data mantendo o contrato do envelope. */
+    public static <T> PaginaRespostaDTO<T> de(Page<T> paginaSpring) {
+        return new PaginaRespostaDTO<>(
+                List.copyOf(paginaSpring.getContent()),
+                paginaSpring.getNumber(),
+                paginaSpring.getSize(),
+                paginaSpring.getTotalElements(),
+                paginaSpring.getTotalPages(),
+                paginaSpring.isLast());
+    }
+
+    /**
+     * Listas MESCLADAS: o service ja entrega o recorte da pagina
+     * (varias consultas paginadas concatenadas e reordenadas em Java) e aqui so
+     * montamos os metadados com o total real somado.
+     */
+    public static <T> PaginaRespostaDTO<T> de(List<T> conteudoDaPagina, long totalElementos, int pagina, int tamanho) {
+        int tamanhoSeguro = (tamanho <= 0) ? 5 : tamanho;
+        int totalPaginas = (totalElementos == 0) ? 0 : (int) Math.ceil((double) totalElementos / tamanhoSeguro);
+        int paginaSegura = Math.max(0, pagina);
+
+        return new PaginaRespostaDTO<>(
+                List.copyOf(conteudoDaPagina),
+                paginaSegura,
+                tamanhoSeguro,
+                totalElementos,
+                totalPaginas,
+                paginaSegura >= totalPaginas - 1);
+    }
+
+    /**
+     * PageRequest com as MESMAS regras de seguranca do envelope: pagina nunca
+     * negativa e tamanho <= 0 vira o padrao de 5 registros por pagina.
+     */
+    public static PageRequest pageRequest(int pagina, int tamanho) {
+        int tamanhoSeguro = (tamanho <= 0) ? 5 : tamanho;
+        return PageRequest.of(Math.max(0, pagina), tamanhoSeguro);
     }
 }

@@ -60,7 +60,12 @@ public class ServicoMecanico {
     @Column(name = "versao_ServicoMecanico")
     private Long versao;
 
-    /** Idempotencia (D5): zerada quando o servico e finalizado. */
+    /**
+     * Idempotencia (D5). AJUSTE 1.4 (decisao do time): a coluna e ANULAVEL
+     * porque o UPDATE de FINALIZACAO zera a chave — nunca porque a solicitacao
+     * possa nascer sem ela. Uma nova solicitacao identica (mesmo colecionador,
+     * carro e servicos) so volta a ser aceita depois que a anterior for FINALIZADA.
+     */
     @Column(name = "chaveIdempotencia_ServicoMecanico", length = 64, unique = true)
     private String chaveIdempotencia;
 
@@ -92,14 +97,17 @@ public class ServicoMecanico {
      * como filtro do painel.
      *
      * LAZY + @BatchSize: a lista e carregada em lote quando varios chamados sao
-     * lidos juntos (evita N+1 ao contar os elegiveis na listagem). Excluida de
-     * toString/equals para nao disparar LazyInitializationException em log.
+     * lidos juntos. AJUSTE 1.1c/1.2: lote de 10 = duas paginas de 5, e nas
+     * LISTAGENS a contagem veio do GROUP BY contarElegiveisPorServico — a
+     * hidratacao aqui fica so para os fluxos que usam o conteudo (proposta e
+     * ranking). Excluida de toString/equals para nao disparar
+     * LazyInitializationException em log.
      */
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "MecanicosElegiveis_ServicoMecanico",
             joinColumns = @JoinColumn(name = "id_ServicoMecanico"),
             inverseJoinColumns = @JoinColumn(name = "id_Mecanico"))
-    @BatchSize(size = 20)
+    @BatchSize(size = 10)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private List<Mecanico> mecanicosElegiveis = new ArrayList<>();

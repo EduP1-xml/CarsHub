@@ -1,5 +1,6 @@
 package carshub.com.br.backend.controllers;
 
+import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroPatchDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRegistroDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRespostaDTO;
@@ -34,10 +35,12 @@ public class CarroController {
     }
 
     @GetMapping
-    public ResponseEntity<List<CarroRespostaDTO>> listarCarros(
-            @RequestHeader("user-id") UUID idEntusiasta) {
-        List<CarroRespostaDTO> carros = servicoCarro.listarCarrosDoColecionador(idEntusiasta);
-        return ResponseEntity.ok(carros);
+    public ResponseEntity<PaginaRespostaDTO<CarroRespostaDTO>> listarCarros(
+            @RequestHeader("user-id") UUID idEntusiasta,
+            @RequestParam(name = "pagina", defaultValue = "0") int pagina,
+            @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
+        return ResponseEntity.ok(PaginaRespostaDTO.de(
+                servicoCarro.listarCarrosDoColecionador(idEntusiasta, pagina, tamanho)));
     }
 
     @GetMapping("/{idCarro}")

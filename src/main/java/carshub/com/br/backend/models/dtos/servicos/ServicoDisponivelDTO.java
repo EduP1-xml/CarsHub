@@ -11,11 +11,17 @@ import java.util.UUID;
  * e carroDescricao. Painel do Guincho: os mesmos, com servicosSolicitados vazio.
  * Nao expoe valor, status interno nem telefone: o contato do colecionador so e
  * liberado depois que a proposta dele for aceita.
+ *
+ * AJUSTE 1.5: notaMatch voltou ao painel como INFORMACAO (o prestador decide se
+ * aceita). A ordenacao continua por distancia — o score nao reordena a lista.
+ * A notaMatch e calculada NA LEITURA (dinamica), com as coordenadas do PERFIL do
+ * prestador; null quando o prestador nao tem coordenadas (sem distancia nao ha match).
  */
 public record ServicoDisponivelDTO(
         UUID idServico,
         String nomeEntusiasta,
         Double distanciaKm,
         List<ServicosOfertados> servicosSolicitados,
-        String carroDescricao
+        String carroDescricao,
+        Integer notaMatch
 ) {}

@@ -4,6 +4,8 @@ import carshub.com.br.backend.models.entities.Mecanico;
 import carshub.com.br.backend.models.entities.servicos.ServicoMecanico;
 import carshub.com.br.backend.models.enums.servicos.StatusServico;
 import carshub.com.br.backend.utils.DistanciaGeografica;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -21,14 +23,26 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
     // LEITURAS
     // ==================================================================
 
+    // Versoes em List alimentam o painel CONSOLIDADO do
+    // colecionador (mescla mecanico + guincho em Java); as versoes em Page<T>
+    // sao a paginacao NATIVA usada pelas rotas proprias de cada painel.
+
     List<ServicoMecanico> findAllByEntusiasta_IdOrderByDataHoraSolicitacaoDesc(UUID idEntusiasta);
 
     List<ServicoMecanico> findAllByEntusiasta_IdAndStatusNotOrderByDataHoraSolicitacaoDesc(UUID idEntusiasta, StatusServico status);
 
-    List<ServicoMecanico> findAllByMecanico_IdOrderByDataHoraSolicitacaoDesc(UUID idMecanico);
+    Page<ServicoMecanico> findAllByEntusiasta_IdOrderByDataHoraSolicitacaoDesc(UUID idEntusiasta, Pageable pageable);
 
-    List<ServicoMecanico> findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(UUID idCarro, StatusServico status);
+    Page<ServicoMecanico> findAllByEntusiasta_IdAndStatusNotOrderByDataHoraSolicitacaoDesc(UUID idEntusiasta, StatusServico status, Pageable pageable);
 
+    Page<ServicoMecanico> findAllByMecanico_IdOrderByDataHoraSolicitacaoDesc(UUID idMecanico, Pageable pageable);
+
+    Page<ServicoMecanico> findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(UUID idCarro, StatusServico status, Pageable pageable);
+
+    /**
+     * Usada pela SolicitacaoExpiradaTask: remocao ENTIDADE POR ENTIDADE (o DELETE
+     * em massa nao limpa a @ElementCollection de servicos).
+     */
     List<ServicoMecanico> findAllByStatusAndDataHoraSolicitacaoBefore(StatusServico status, LocalDateTime limite);
 
     /** Cota de servicos ativos do prestador (no maximo 2). */
@@ -38,11 +52,9 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
 
     /**
      * API TIPADA do painel: recebe o enum de status e a caixa de coordenadas.
-     *
      * A conversao para texto acontece AQUI, sempre a partir do proprio valor
      * (StatusServico.name() e o WKT gerado pelo DistanciaGeografica) — nunca de um
      * literal. Se o enum for renomeado no futuro, a compilacao aponta esta linha.
-     *
      * Motivo de o metodo anotado receber String: em consulta NATIVA o Hibernate nao
      * tem o contexto de @Enumerated(STRING) da entidade e tende a enviar o enum como
      * numero, e o MySQL compara coluna ENUM por POSICAO. Evitamos a questao.
@@ -72,7 +84,6 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
     /**
      * Entidades dos IDs candidatos, restritas aos chamados em que o mecanico esta na
      * lista de ELEGIVEIS.
-     *
      * A comparacao do UUID fica aqui, em JPQL, para o Hibernate converter o
      * identificador para BINARY(16) pelo mapeamento da entidade — em SQL nativo isso
      * dependeria de UUID_TO_BIN e da ordem dos bytes.
@@ -100,6 +111,20 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
             """)
     List<Object[]> contarAtivosPorMecanico(@Param("ids") Collection<UUID> ids,
                                            @Param("statuses") Collection<StatusServico> statuses);
+
+    /**
+     * AJUSTE 1.1c: contagem de elegiveis em UMA consulta (GROUP BY). A colecao
+     * mecanicosElegiveis so entrava no DTO por .size() — contar no banco evita
+     * hidratar entidades Mecanico inteiras em cada listagem.
+     */
+    @Query("""
+            SELECT s.id, COUNT(m)
+              FROM ServicoMecanico s
+              JOIN s.mecanicosElegiveis m
+             WHERE s.id IN :ids
+             GROUP BY s.id
+            """)
+    List<Object[]> contarElegiveisPorServico(@Param("ids") Collection<UUID> ids);
 
     /**
      * MATCH (M4): mecanicos da lista de ELEGIVEIS gravada na criacao, menos os

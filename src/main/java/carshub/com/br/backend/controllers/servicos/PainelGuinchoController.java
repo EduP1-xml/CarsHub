@@ -44,7 +44,8 @@ public class PainelGuinchoController {
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 
-        return ResponseEntity.ok(PaginaRespostaDTO.de(servicoGuincho.listarMinhaFilaDeTrabalho(id), pagina, tamanho));
+        return ResponseEntity.ok(PaginaRespostaDTO.de(
+                servicoGuincho.listarMinhaFilaDeTrabalho(id, pagina, tamanho)));
     }
 
     @GetMapping("/{idServico}")

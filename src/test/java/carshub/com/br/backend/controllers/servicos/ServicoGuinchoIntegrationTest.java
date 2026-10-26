@@ -62,7 +62,7 @@ class ServicoGuinchoIntegrationTest extends TesteIntegracaoBase {
         UUID idServico = UUID.fromString(objectMapper.readTree(criado.getResponse().getContentAsString())
                 .get("idServico").asText());
 
-        // Painel do guincho: sem notaMatch e sem lista de servicos
+        // Painel do guincho: com notaMatch (ajuste 1.5) e sem lista de servicos
         mockMvc.perform(get(BASE_GUINCHO + "/disponiveis")
                         .header("user-id", guincho.getId())
                         .param("latitude", String.valueOf(LATITUDE_PADRAO))
@@ -70,7 +70,7 @@ class ServicoGuinchoIntegrationTest extends TesteIntegracaoBase {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.conteudo[*].idServico")
                         .value(org.hamcrest.Matchers.hasItem(idServico.toString())))
-                .andExpect(jsonPath("$.conteudo[0].notaMatch").doesNotExist())
+                .andExpect(jsonPath("$.conteudo[0].notaMatch").isNumber())
                 .andExpect(jsonPath("$.conteudo[0].servicosSolicitados").isEmpty());
 
         mockMvc.perform(post(BASE_GUINCHO + "/{id}/proposta", idServico)

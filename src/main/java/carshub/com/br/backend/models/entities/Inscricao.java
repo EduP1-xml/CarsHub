@@ -43,6 +43,11 @@ public class Inscricao {
     @Column(name = "status_Inscricao", nullable = false)
     private StatusInscricao status = StatusInscricao.CONFIRMADA;
 
+    /** AJUSTE 1.3: travamento otimista. Conflito de escrita -> 409. */
+    @Version
+    @Column(name = "versao_Inscricao")
+    private Long versao;
+
     @NotNull
     @Column(name = "data_Inscricao", nullable = false, updatable = false)
     private LocalDateTime data = LocalDateTime.now();
