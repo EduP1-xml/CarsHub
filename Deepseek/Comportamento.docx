@@ -1,0 +1,1260 @@
+================================================================================
+COMPORTAMENTO DO BACKEND — CARS HUB
+Especificação completa de endpoints e fluxos para geração do FRONTEND
+================================================================================
+
+FONTES: documento "CarHub-Handoff.md" (Contexto Ajustes Futuros, 26/10/2026) e o
+código-fonte mais recente em disco (CarsHub — Sprints 1 a 5 + ajustes 1.1 a 1.5
+entregues e validados, 74/74 testes verdes).
+ESCOPO: SOMENTE o que já está feito e consolidado. A Sprint 6 (JWT) NÃO está
+implementada e NÃO faz parte deste documento. Melhorias futuras e dívidas
+técnicas NÃO entram aqui.
+
+ATENÇÃO GERAL PARA O FRONTEND:
+- A identidade do usuário logado é o header "user-id" (UUID do ator). NÃO existe
+  token/JWT. Esse header é obrigatório em praticamente todas as rotas.
+- O backend NÃO tem OpenAPI/Swagger. Este documento é a fonte única.
+- Todas as mensagens de erro vêm em pt-BR, prontas para exibir ao usuário.
+
+================================================================================
+ÍNDICE
+================================================================================
+1.  CONCEITOS GERAIS (base URL, identidade, erros, paginação, uploads, enums)
+2.  INVENTÁRIO COMPLETO DE ENDPOINTS
+3.  TIPOS DE USUÁRIO (atores)
+4.  FLUXOS POR TIPO DE USUÁRIO (jornadas completas com telas e regras)
+    4.1 Fluxos comuns (visitante / conta)
+    4.2 Entusiasta
+    4.3 Colecionador
+    4.4 Organizador de Eventos
+    4.5 Mecânico (prestador)
+    4.6 Guincho (prestador)
+5.  REGRAS TRANSVERSAIS QUE O FRONTEND PRECISA REPRODUZIR
+6.  CATÁLOGO DOS ENUMS
+7.  AVISOS E LACUNAS DE CONTRATO (o que o backend NÃO devolve e o front precisa saber)
+
+================================================================================
+1. CONCEITOS GERAIS
+================================================================================
+
+1.1 BASE URL E SERVIDOR
+- Backend: Spring Boot, porta 8080.
+- Prefixo de TODAS as rotas da API: /api/carshub
+- Exemplo: http://localhost:8080/api/carshub/autenticacao/login
+- Arquivos enviados (fotos) são servidos em: http://localhost:8080/uploads/<nome>
+  (as respostas devolvem a URL completa de download de cada arquivo).
+
+1.2 IDENTIDADE (COMO O BACKEND SABE QUEM VOCÊ É)
+- Header OBRIGATÓRIO na maioria das rotas: user-id = UUID do ator.
+- O UUID é obtido no fluxo de login: o endpoint POST /autenticacao/login devolve
+  um TEXTO (não JSON) no formato:
+  "Login realizado com sucesso! Bem-vindo, <NOME>. ID: <UUID>, tipo: <TIPO>[, com a especificidade de <SUBTIPO>]"
+  O frontend deve guardar o UUID contido nessa mensagem e reenviá-lo em todas as
+  chamadas no header user-id.
+- Segurança atual: SecurityConfigurations tem tudo permitAll (qualquer requisição
+  passa). A checagem de dono do recurso é feita dentro de cada service e devolve
+  403 (PerfilIncompativelException) quando o id do header não é o dono/perfil certo.
+- CSRF desabilitado; sessão STATELESS; CORS liberado para a origem do frontend
+  (configuração frontend.url, default http://localhost:5173).
+- CORS — métodos permitidos: GET, POST, PUT, DELETE, OPTIONS. Headers permitidos:
+  Authorization, Content-Type, X-Requested-With, Accept, Origin, Admin-Token,
+  X-XSRF-TOKEN. Credenciais permitidas; maxAge 3600.
+  ⚠️ OBSERVAÇÃO DE CONTRATO: PATCH NÃO está na lista de métodos CORS permitidos.
+  Chamadas PATCH a partir de navegador (origem http://localhost:5173) podem ser
+  bloqueadas no preflight. O frontend precisa considerar isso (usar proxy no dev
+  ou solicitar o ajuste do CORS antes de depender de PATCH).
+
+1.3 PAGINAÇÃO (CONTRATO ÚNICO DE TODAS AS LISTAS)
+Toda listagem paginada devolve o envelope PaginaRespostaDTO:
+{
+  "conteudo":      [ ...itens da página... ],
+  "pagina":        0,        // base 0
+  "tamanho":       5,        // itens por página
+  "totalElementos": 12,      // total de todas as páginas
+  "totalPaginas":  3,
+  "ultima":        false     // true quando é a última página
+}
+Regras:
+- Query params padrão: pagina (default 0) e tamanho (default 5).
+- tamanho <= 0 é corrigido para 5; pagina negativa é corrigida para 0.
+- Se a lista ficou vazia: conteudo [], totalElementos 0, totalPaginas 0, ultima true.
+- Exceções (listas NÃO paginadas): GET /entusiastas/inscricoes (lista completa).
+
+1.4 ERROS — MAPA DE STATUS HTTP
+- 400  Validação de campos (Bean Validation): devolve JSON {campo: mensagem}
+      (ex.: {"senha": "A senha deve ter no mínimo 8 caracteres..."}).
+      400 também para: corpo mal formatado, header user-id ausente
+      ("O cabeçalho obrigatório 'user-id' não foi informado."), parte multipart
+      ausente, parâmetro com tipo inválido, coordenadas fora da faixa,
+      campo obrigatório de regra (CampoObrigatorioException).
+- 401  "Credenciais inválidas." (login: e-mail inexistente, senha errada ou tipo
+      de perfil selecionado errado — mensagem única de propósito).
+- 403  Perfil errado ou recurso de outro dono ("Acesso Negado: ...").
+- 404  Recurso não encontrado ("... não encontrado." / "Sessão inválida: ...").
+- 405  Método HTTP não suportado na rota.
+- 409  Conflito: e-mail/CPF/CNPJ/placa já cadastrados; solicitação de serviço
+      duplicada (idempotência); violação de integridade no banco; conflito de
+      concorrência (@Version) — "Este registro foi alterado por outra pessoa
+      enquanto você o editava. Atualize a tela e tente novamente."
+- 413  Arquivo maior que o limite de 15MB.
+- 415  Content-Type não suportado (corpo deve ser application/json).
+- 422  Regra de negócio / estado inválido (mensagens específicas em cada fluxo).
+- 500  Erro inesperado do servidor (mensagem genérica).
+- 502/503/504 Falhas de serviços externos: e-mail (502 autenticação recusada,
+      503 falha genérica, 504 timeout) e geocodificação (502 chave recusada/
+      ausente, 503 falha genérica, 504 timeout).
+
+1.5 UPLOADS (MULTIPART)
+- Limite: 15MB por arquivo E por requisição (configuração spring.servlet.multipart).
+- Tipos aceitos (fotos): .jpg, .jpeg e .png. Arquivo com outra extensão →
+  erro "Formato de arquivo inválido. Por favor, envie apenas imagens (JPG, JPEG ou PNG)."
+- Nome com ".." → "Tentativa bloqueada" (proteção de path traversal).
+- ⚠️ As falhas de validação de arquivo (formato/nome) do FileStorageService são
+  RuntimeException e chegam como HTTP 500 com a mensagem no corpo — o frontend
+  deve pré-validar jpg/jpeg/png ≤ 15MB e exibir a mensagem do corpo do 500.
+- O backend gera nome único (UUID + nome original) e devolve a URL pública
+  http://localhost:8080/uploads/<arquivo>. Todos os arquivos ficam na MESMA
+  pasta (sem subpastas por usuário/entidade).
+- Rotas multipart e seus campos:
+  * Foto de perfil (4 atores): POST .../foto-perfil, campo de arquivo = "arquivo".
+  * Carro: POST /colecionador/carros — partes "dados" (JSON do carro) +
+    "arquivos" (até 2 fotos, opcional).
+  * Evento: POST /organizadores/eventos — partes "dados" (JSON do evento) +
+    "arquivos" (até 3 fotos, opcional).
+  * Serviço: POST .../foto-inicial e .../foto-final — campo "arquivo" (1 foto).
+
+1.6 DATAS E COORDENADAS
+- Datas: LocalDateTime no formato ISO-8601 SEM offset, ex.: "2026-11-01T10:00:00".
+  (datas de eventos, dataHora* dos serviços, dataInscricao etc.)
+- dataNascimento: LocalDate, ex.: "1990-05-20".
+- Coordenadas: latitude entre -90 e 90; longitude entre -180 e 180; normalizadas
+  a 7 casas decimais (WGS84) nas respostas de geocodificação.
+
+================================================================================
+2. INVENTÁRIO COMPLETO DE ENDPOINTS
+================================================================================
+(Resumo exaustivo. Os contratos detalhados de request/response estão na seção 4,
+dentro de cada fluxo. "H" = exige header user-id. "P" = paginado.)
+
+CADASTRO E AUTENTICAÇÃO (sem header user-id)
+--------------------------------------------------------------------------------
+POST /api/carshub/usuarios/cadastrar                     etapa 1 — cria usuário base (201)
+POST /api/carshub/usuarios/cadastrar/individual          etapa 2 — dados do perfil (200)
+POST /api/carshub/usuarios/cadastrar/verificarRegistro   etapa 3 — confirma código de 6 dígitos (200)
+POST /api/carshub/usuarios/cadastrar/reenviarCodigo      reenvia código (cooldown 60 s) (200)
+POST /api/carshub/autenticacao/login                     login → TEXTO com ID do usuário (200/401)
+POST /api/carshub/autenticacao/esqueci-senha             solicita código de recuperação (200 sempre)
+PATCH /api/carshub/autenticacao/senha/redefinir          redefine a senha com o código (200)
+
+PERFIS DOS ATORES (H = header user-id obrigatório)
+--------------------------------------------------------------------------------
+Entusiasta (H):
+PUT    /api/carshub/entusiastas/perfil                   substitui perfil (200)
+PATCH  /api/carshub/entusiastas/perfil                   atualiza perfil parcial (200)
+PUT    /api/carshub/entusiastas/localizacao              atualiza latitude/longitude (204)
+POST   /api/carshub/entusiastas/foto-perfil              multipart "arquivo" (201 → URL)
+POST   /api/carshub/entusiastas/senha/solicitar-codigo   código para trocar senha (200)
+PATCH  /api/carshub/entusiastas/senha                    troca a senha com o código (200)
+
+Organizador (H):  (mesmas rotas com o prefixo /api/carshub/organizadores)
+PUT/PATCH /organizadores/perfil · POST /organizadores/foto-perfil ·
+POST /organizadores/senha/solicitar-codigo · PATCH /organizadores/senha
+(O organizador NÃO tem rota de localização.)
+
+Mecânico (H):  (prefixo /api/carshub/mecanicos)
+PUT/PATCH /mecanicos/perfil · PUT /mecanicos/localizacao (204) ·
+POST /mecanicos/foto-perfil · POST /mecanicos/senha/solicitar-codigo ·
+PATCH /mecanicos/senha
+
+Guincho (H):  (prefixo /api/carshub/guinchos)
+PUT/PATCH /guinchos/perfil · PUT /guinchos/localizacao (204) ·
+POST /guinchos/foto-perfil · POST /guinchos/senha/solicitar-codigo ·
+PATCH /guinchos/senha
+
+GARAGEM — COLECIONADOR (H)
+--------------------------------------------------------------------------------
+POST   /api/carshub/colecionador/carros                  multipart "dados"+"arquivos" máx 2 fotos (201)
+GET    /api/carshub/colecionador/carros?pagina&tamanho   garagem paginada (P)
+GET    /api/carshub/colecionador/carros/{idCarro}        detalhe
+PUT    /api/carshub/colecionador/carros/{idCarro}        substituição completa (JSON)
+PATCH  /api/carshub/colecionador/carros/{idCarro}        atualização parcial (JSON)
+DELETE /api/carshub/colecionador/carros/{idCarro}        remove (204; último carro revoga o título)
+GET    /api/carshub/colecionador/carros/{idCarro}/historico-manutencoes?pagina&tamanho  (P)
+
+EVENTOS — ORGANIZADOR (H)
+--------------------------------------------------------------------------------
+POST   /api/carshub/organizadores/eventos                multipart "dados"+"arquivos" máx 3 fotos (201)
+GET    /api/carshub/organizadores/eventos?pagina&tamanho meus eventos, mais recentes primeiro (P)
+GET    /api/carshub/organizadores/eventos/{idEvento}     detalhe (só do dono)
+PUT    /api/carshub/organizadores/eventos/{idEvento}     substituição completa (JSON)
+PATCH  /api/carshub/organizadores/eventos/{idEvento}     atualização parcial (JSON)
+PATCH  /api/carshub/organizadores/eventos/{idEvento}/status?novoStatus=<enum>  muda status
+DELETE /api/carshub/organizadores/eventos/{idEvento}     exclui (204)
+
+EVENTOS — CATÁLOGO PÚBLICO (header user-id OPCIONAL)
+--------------------------------------------------------------------------------
+GET /api/carshub/eventos?pagina&tamanho                  feed de eventos ATIVO, dataHoraInicio asc (P)
+GET /api/carshub/eventos/{idEvento}                      detalhe público (sem checagem de status)
+
+INSCRIÇÕES — ENTUSIASTA (H)
+--------------------------------------------------------------------------------
+POST  /api/carshub/entusiastas/inscricoes                inscreve → 201 CONFIRMADA
+GET   /api/carshub/entusiastas/inscricoes                minhas inscrições (lista COMPLETA, sem paginação)
+PATCH /api/carshub/entusiastas/inscricoes/{idInscricao}/cancelar  cancela (devolve a vaga)
+
+DASHBOARD — ORGANIZADOR (H)
+--------------------------------------------------------------------------------
+GET /api/carshub/organizadores/dashboard/metricas        total de eventos + participantes mobilizados
+GET /api/carshub/organizadores/dashboard/historico?pagina&tamanho  CONCLUÍDO+CANCELADO mesclados (P)
+
+SERVIÇOS — COLECIONADOR (H)
+--------------------------------------------------------------------------------
+Mecânico (prefixo /api/carshub/colecionador/servicos/mecanicos):
+POST   ""                                            abre chamado (201 → SOLICITADO)
+GET    ""?somenteAbertos&pagina&tamanho              meus chamados (P; default somenteAbertos=true)
+GET    /{idServico}                                  detalhe
+PATCH  /{idServico}/aceitar-proposta                 PROPOSTA → PENDENTE
+PATCH  /{idServico}/rejeitar-proposta                PROPOSTA → SOLICITADO
+POST   /{idServico}/foto-inicial                     multipart "arquivo" (só PENDENTE; imutável)
+PATCH  /{idServico}/confirmar-chegada                confirmação do colecionador (dupla → CHEGOU)
+POST   /{idServico}/foto-final                       multipart "arquivo" (só CHEGOU; 1 vez)
+POST   /{idServico}/avaliacao                        JSON {nota, comentario?} (exige foto final própria)
+PATCH  /{idServico}/confirmar-conclusao              handshake de conclusão (dupla → FINALIZADO)
+DELETE /{idServico}                                  cancelamento (204; PENDENTE só após 2 h)
+Guincho: MESMAS 11 rotas com o prefixo
+/api/carshub/colecionador/servicos/guinchos.
+
+Painel consolidado e ranking (H):
+GET /api/carshub/colecionador/servicos?pagina&tamanho
+    ativos dos DOIS tipos, mesclados por dataHoraSolicitacao desc (P — corte em memória)
+GET /api/carshub/colecionador/servicos/{idServico}/prestadores-compativeis?pagina&tamanho
+    ranking de prestadores do chamado (P — corte em memória)
+
+SERVIÇOS — PRESTADOR (H)
+--------------------------------------------------------------------------------
+Mecânico (prefixo /api/carshub/mecanicos/servicos):
+GET    /disponiveis?raioKm&latitude&longitude&endereco&pagina&tamanho
+       chamados SOLICITADO da região, elegíveis para ele (P — corte em memória)
+GET    ""?pagina&tamanho                             fila de trabalho do mecânico (P)
+GET    /{idServico}                                  detalhe (só se participa)
+POST   /{idServico}/proposta                         JSON {valorProposto, latitude?, longitude?}
+PATCH  /{idServico}/confirmar-chegada                confirmação do mecânico
+POST   /{idServico}/foto-final                       multipart "arquivo"
+POST   /{idServico}/avaliacao                        JSON (avalia o colecionador)
+PATCH  /{idServico}/confirmar-conclusao              confirmação do mecânico
+Guincho: MESMAS 8 rotas com o prefixo /api/carshub/guinchos/servicos.
+
+Total: 90 endpoints (contando cada método HTTP de cada rota).
+
+================================================================================
+3. TIPOS DE USUÁRIO (ATORES)
+================================================================================
+- ENTUSIASTA: usuário comum. CPF no cadastro. Vê o catálogo de eventos, se
+  inscreve, tem perfil com localização/foto/senha.
+- COLECIONADOR: NÃO é cadastrado como tal. Um Entusiasta VIRA Colecionador
+  automaticamente ao cadastrar o 1º carro na garagem (tipoUsuario muda para
+  COLECIONADOR no banco) e PERDE o título ao excluir o último carro. Só o
+  colecionador solicita serviços mecânicos/guincho e vê garagem/histórico/ranking.
+- ORGANIZADOR_EVENTO: CNPJ no cadastro. Cria e administra eventos, vê dashboard.
+- PRESTADOR_SERVICO com subtipo MECANICO: CNPJ + lista de serviços ofertados.
+  Tem painel de chamados disponíveis (elegíveis) e fila de trabalho.
+- PRESTADOR_SERVICO com subtipo GUINCHO: CNPJ + placa do guincho. Mesmo painel,
+  mas NÃO tem catálogo de serviços (todo guincho ativo é elegível).
+OBSERVAÇÃO: no cadastro (etapa 1) o tipoUsuario aceita COLECIONADOR, mas ele é
+tratado igual a ENTUSIASTA (cria um Entusiasta). No login o usuário informa o
+tipoUsuarioSelecionado com o qual quer entrar (o backend valida a igualdade).
+
+================================================================================
+4. FLUXOS POR TIPO DE USUÁRIO
+================================================================================
+Formato de cada fluxo:
+  [JORNADA] descrição da jornada do usuário
+  [TELAS] como a tela deve ser composta (elementos), com base no que o backend
+          devolve
+  [DADOS/ENDPOINTS] chamadas com payloads exatos e respostas
+  [REGRAS/ERROS] validações e mensagens a exibir
+
+--------------------------------------------------------------------------------
+4.1 FLUXOS COMUNS (VISITANTE / CONTA)
+--------------------------------------------------------------------------------
+
+F1 — CADASTRO EM 3 ETAPAS
+[JORNADA] O visitante cria a conta em três passos obrigatórios: (1) dados base +
+e-mail/senha; (2) dados específicos do tipo de usuário; (3) confirmação do
+código de 6 dígitos recebido por e-mail. Só depois de confirmar a conta pode
+fazer login.
+
+[TELAS]
+Etapa 1 — "Criar conta":
+- Campos: nome (até 100), e-mail/login, senha, data de nascimento (LocalDate),
+  telefone (até 17), tipo de usuário (select: ENTUSIASTA, COLECIONADOR,
+  ORGANIZADOR_EVENTO, PRESTADOR_SERVICO).
+- Quando PRESTADOR_SERVICO for escolhido, exibir obrigatoriamente o select de
+  subtipo: MECANICO ou GUINCHO.
+- Botão "Continuar".
+Etapa 2 — "Complete seu cadastro" (depende do tipo escolhido na etapa 1):
+- E-mail (o mesmo da etapa 1, identifica a conta).
+- ENTUSIASTA/COLECIONADOR: campo CPF (11 dígitos numéricos).
+- ORGANIZADOR_EVENTO: campo CNPJ (14 dígitos numéricos).
+- GUINCHO: CNPJ (14) + placa (7 alfanuméricos).
+- MECÂNICO: CNPJ (14) + seleção de ao menos 1 serviço ofertado (checkboxes dos
+  6 do enum ServicosOfertados).
+Etapa 3 — "Verificação":
+- Texto explicativo "enviamos um código de 6 dígitos para o seu e-mail";
+- Input de 6 dígitos; botão "Confirmar";
+- Link "Reenviar código" (usa F2).
+
+[DADOS/ENDPOINTS]
+1) POST /api/carshub/usuarios/cadastrar  (201)
+   Body JSON:
+   { "nome": "...", "login": "email@x.com", "senha": "...",
+     "dataNascimento": "1990-05-20", "telefone": "...",
+     "tipoUsuario": "ENTUSIASTA" | "COLECIONADOR" | "ORGANIZADOR_EVENTO" | "PRESTADOR_SERVICO",
+     "tipoPrestadorServico": null | "MECANICO" | "GUINCHO" }
+   Resposta 201: texto
+   "Usuário registrado com sucesso. Continue o cadastro em /api/carshub/usuarios/cadastrar/individual e confirme o código enviado para o seu e-mail."
+2) POST /api/carshub/usuarios/cadastrar/individual  (200)
+   Body JSON:
+   { "email": "email@x.com", "cpf": "...", "cnpj": "...", "placa": "...",
+     "servicosOfertados": ["TROCA_DE_OLEO", ...] }
+   (somente os campos do tipo; os demais podem ficar null)
+   Resposta 200: texto
+   "Dados individuais registrados com sucesso. Confirme o código enviado para o seu e-mail para ativar a conta."
+3) POST /api/carshub/usuarios/cadastrar/verificarRegistro  (200)
+   Body JSON: { "email": "email@x.com", "codigo": "123456" }
+   Resposta 200: "E-mail verificado com sucesso. Você já pode fazer login no CarsHub."
+
+[REGRAS/ERROS]
+- Senha FORTE obrigatória: mínimo 8 caracteres, 1 maiúscula, 1 minúscula,
+  1 número e 1 especial do conjunto @ $ ! % * ? & (outros especiais são
+  recusados). Erro 400 (mapa campo→mensagem).
+- E-mail já cadastrado → 409 "E-mail já cadastrado na plataforma."
+- CPF/CNPJ/placa já cadastrados → 409 com mensagem específica.
+- Campo obrigatório por perfil ausente → 400 (CampoObrigatorioException),
+  ex.: "O CPF é obrigatório para o cadastro de Entusiasta/Colecionador.",
+  "O CNPJ é obrigatório para prestadores de serviço.",
+  "A placa é obrigatória para Guinchos.",
+  "Mecânicos devem selecionar ao menos um serviço oferecido."
+- Etapa 2 em conta já confirmada → 422 "Esta conta já foi confirmada. Os dados
+  individuais não podem mais ser alterados."
+- Código inválido → 422 "Código de verificação inválido."
+- Código expirado (validade 10 min) → 422 "Código de verificação expirado.
+  Solicite um novo."
+- Conta já verificada → 422 "Esta conta já foi verificada anteriormente.
+  Faça login para continuar."
+- E-mail de verificação pode falhar (502/503/504) mas a conta É criada; nesse
+  caso o usuário deve usar o reenvio.
+
+F2 — REENVIO DE CÓDIGO
+[JORNADA] O visitante pede um novo código de verificação quando o anterior não
+chegou ou expirou.
+[TELAS] Na etapa 3 do cadastro: botão/link "Reenviar código". Após o clique,
+mostrar a mensagem de sucesso ou o tempo restante do cooldown; iniciar contador
+de 60 s e desabilitar o botão.
+[DADOS] POST /api/carshub/usuarios/cadastrar/reenviarCodigo
+Body: { "email": "email@x.com" }
+200: "Enviamos um novo código de verificação para o seu e-mail. Ele substitui o código anterior e é válido por 10 minutos."
+[REGRAS/ERROS]
+- Cooldown 60 s → 422 "Aguarde X segundo(s) para solicitar um novo código."
+- Conta já verificada → 422 "Esta conta já foi verificada. Faça login para continuar."
+- E-mail não encontrado → 404 "Usuário não encontrado para o e-mail informado."
+- Falha de e-mail → 502/503/504.
+- O código novo SUBSTITUI o anterior e reinicia os 10 minutos.
+
+F3 — LOGIN
+[JORNADA] Usuário com conta verificada entra no app.
+[TELAS] Tela de login:
+- Campo e-mail; campo senha (mascarada);
+- Select "tipo de perfil" (obrigatório): ENTUSIASTA, COLECIONADOR,
+  ORGANIZADOR_EVENTO, PRESTADOR_SERVICO.
+- Quando PRESTADOR_SERVICO: select de subtipo (MECANICO/GUINCHO) obrigatório.
+- Link "Esqueci minha senha" (vai para F4).
+- Em erro 401, mostrar "Credenciais inválidas." (sem diferenciar e-mail/senha/tipo).
+- Em sucesso: extrair o UUID da mensagem de texto e guardá-lo (header user-id
+  de todas as próximas chamadas) e o nome/tipo exibidos na mensagem.
+[DADOS] POST /api/carshub/autenticacao/login
+Body: { "login": "email@x.com", "senha": "...",
+        "tipoUsuarioSelecionado": "...", "tipoPrestador": null|"MECANICO"|"GUINCHO" }
+200 (TEXTO): "Login realizado com sucesso! Bem-vindo, <nome>. ID: <uuid>, tipo: <TIPO>, com a especificidade de <SUBTIPO>"
+[REGRAS/ERROS]
+- 401 "Credenciais inválidas." para: e-mail inexistente, senha errada ou
+  tipoUsuarioSelecionado diferente do tipo real do usuário (ou subtipo errado).
+- 400 "Selecione o tipo de prestador de serviço (Mecânico ou Guincho)." quando
+  PRESTADOR_SERVICO sem subtipo.
+
+F4 — ESQUECI MINHA SENHA
+[JORNADA] Usuário deslogado pede recuperação de senha.
+[TELAS] Tela "Esqueci minha senha": campo e-mail + botão "Enviar código".
+Sempre exibir a mensagem genérica de sucesso; NUNCA revelar se o e-mail existe.
+[DADOS] POST /api/carshub/autenticacao/esqueci-senha
+Body: { "email": "email@x.com" }
+200: "Se o e-mail estiver cadastrado, enviaremos um código de verificação."
+[REGRAS/ERROS]
+- Resposta é SEMPRE a mesma (200), exista ou não o e-mail.
+- Cooldown de 24 h SILENCIOSO: dentro do intervalo, nenhum e-mail é enviado e a
+  resposta continua idêntica (o frontend não precisa tratar cooldown aqui).
+- Código válido por 10 minutos; um novo código substitui o anterior.
+
+F5 — REDEFINIR SENHA
+[JORNADA] Continuação de F4: usuário informa o código recebido e a nova senha.
+[TELAS] Tela "Redefinir senha": campo e-mail (pré-preenchido do passo anterior),
+campo código (6 dígitos), campo nova senha (com as regras de senha forte
+visíveis), botão "Redefinir".
+[DADOS] PATCH /api/carshub/autenticacao/senha/redefinir
+Body: { "email": "email@x.com", "codigo": "123456", "novaSenha": "..." }
+200: "Senha redefinida com sucesso."
+[REGRAS/ERROS]
+- Senha fraca → 400 (validação @Size mín 8 no DTO e política forte no service,
+  mensagem da política).
+- E-mail não encontrado → 422 "Código de verificação inválido." (mesma resposta
+  do código errado, de propósito).
+- Código inválido → 422 "Código de verificação inválido."
+- Código expirado → 422 "Código de verificação expirado. Solicite um novo."
+- Após redefinir, o código é consumido (não reutilizável).
+
+F6 — CATÁLOGO PÚBLICO DE EVENTOS (qualquer usuário, logado ou não)
+[JORNADA] Feed principal do app: lista de eventos ATIVO, dos mais próximos
+(por data) para os mais distantes. Usuário logado vê a flag "já inscrito".
+[TELAS] Tela "Eventos" (feed):
+- Cada card: nome, descrição, preço (R$), endereço (rua, número, bairro),
+  nome do organizador, data/hora de início e fim, badge "X vagas" com
+  vagasDisponiveis, badge "Inscrito" quando inscrito=true.
+- Com coordenadas (latitude/longitude) o card pode ter link "ver no mapa".
+- Paginação: indicador de página, total, botões anterior/próxima; desabilitar
+  "próxima" quando ultima=true.
+- Tela "Detalhe do evento": mesmos campos + botão "Inscrever-se" (logado,
+  fluxo F11 do entusiasta); se inscrito=true mostrar "Você já está inscrito".
+  Sem vagas (vagasDisponiveis=0) o botão deve aparecer desabilitado com o aviso
+  de lotação (a regra final é do backend — 422).
+[DADOS]
+GET /api/carshub/eventos?pagina=0&tamanho=5
+Header user-id: OPCIONAL (sem ele, inscrito vem false).
+Resposta 200 (envelope) com itens:
+{ "idEvento": "<uuid>", "nome": "...", "descricao": "...", "preco": 0.00,
+  "rua": "...", "numero": "...", "bairro": "...", "latitude": -23.55,
+  "longitude": -46.63, "nomeOrganizador": "...", "vagasDisponiveis": 10,
+  "inscrito": false, "dataHoraInicio": "...", "dataHoraFim": "..." }
+GET /api/carshub/eventos/{idEvento} (mesmo formato de item).
+[REGRAS/ERROS]
+- Só eventos com status ATIVO aparecem no feed (ordenado por dataHoraInicio asc).
+- vagasDisponiveis = limiteParticipantes − inscrições CONFIRMADA (nunca negativo).
+- Detalhe: 404 "Evento não encontrado." se o id não existe.
+- ⚠️ O detalhe público NÃO filtra por status (retorna também eventos que já
+  foram cancelados/concluídos se o id for conhecido).
+
+--------------------------------------------------------------------------------
+4.2 ENTUSIASTA
+--------------------------------------------------------------------------------
+
+F7 — MEU PERFIL (ENTUSIASTA)
+[JORNADA] Entusiasta edita nome e telefone.
+[TELAS] Tela "Perfil": campos nome (até 100) e telefone (até 17); dois modos:
+edição completa (PUT) ou parcial (PATCH). Exibir mensagens de sucesso:
+"Perfil do entusiasta substituído com sucesso." /
+"Perfil do entusiasta modificado parcialmente com sucesso."
+⚠️ NÃO existe endpoint GET de perfil: a tela não consegue pré-carregar os dados
+atuais do backend (ver seção 7).
+[DADOS]
+PUT  /api/carshub/entusiastas/perfil  Body: { "nome": "...", "telefone": "..." }
+PATCH /api/carshub/entusiastas/perfil Body: { "nome"?: "...", "telefone"?: "..." }
+[REGRAS/ERROS]
+- PUT: nome/telefone obrigatórios (400 com mapa de erros).
+- 404 "Sessão inválida: Entusiasta não encontrado." se o user-id não existe.
+
+F8 — MINHA LOCALIZAÇÃO (ENTUSIASTA)
+[JORNADA] Entusiasta informa sua localização (usada como fallback de localização
+nos serviços).
+[TELAS] Tela de perfil/localização: botão "usar minha localização" (GPS do
+dispositivo) e/ou campos latitude/longitude; botão salvar. Sucesso = 204
+(sem corpo); a tela pode apenas confirmar.
+[DADOS] PUT /api/carshub/entusiastas/localizacao
+Body: { "latitude": -23.55, "longitude": -46.63 }
+[REGRAS/ERROS]
+- Atualiza apenas os campos informados (pode enviar um só dos dois).
+- 404 se user-id não existe.
+- Não há validação de faixa aqui (faixa é validada nos serviços).
+
+F9 — FOTO DE PERFIL (ENTUSIASTA)
+[JORNADA] Entusiasta envia a foto do perfil.
+[TELAS] Tela de perfil: avatar com pré-visualização; botão "trocar foto" abre
+seletor de arquivo (jpg/jpeg/png até 15MB). Após o envio, exibir a imagem pela
+URL devolvida.
+[DADOS] POST /api/carshub/entusiastas/foto-perfil (multipart/form-data)
+Campo: "arquivo" (imagem).
+201: texto com a URL, ex.: "http://localhost:8080/uploads/<uuid>_foto.png"
+[REGRAS/ERROS]
+- Usuário inexistente → 404.
+- Formato inválido → 500 com "Erro ao salvar imagem: Formato de arquivo
+  inválido. Por favor, envie apenas imagens (JPG, JPEG ou PNG)." (comportamento
+  atual do controller: RuntimeException vira 500 — ver seção 7).
+- >15MB → 413.
+
+F10 — TROCAR SENHA LOGADO (ENTUSIASTA)
+[JORNADA] Entusiasta logado troca a senha em 2 passos (solicitar código →
+informar código + nova senha).
+[TELAS] Tela "Segurança": botão "Enviar código para meu e-mail" (desabilitar por
+60 s após o envio); depois campos código (6 dígitos) + nova senha + confirmar.
+[DADOS]
+POST  /api/carshub/entusiastas/senha/solicitar-codigo  (sem body)
+      200: "Enviamos um código de verificação para o seu e-mail."
+PATCH /api/carshub/entusiastas/senha
+      Body: { "codigo": "123456", "novaSenha": "..." }
+      200: "Senha alterada com sucesso."
+[REGRAS/ERROS]
+- Cooldown 60 s → 422 "Aguarde X segundo(s) para solicitar um novo código."
+- Política de senha forte (mesma do cadastro) → 400.
+- Código inválido/expirado → 422.
+- Código consumido após o uso.
+
+F11 — INSCREVER-SE EM UM EVENTO
+[JORNADA] Entusiasta (logado) se inscreve em um evento ATIVO do catálogo,
+opcionalmente vinculando um carro da garagem.
+[TELAS] No detalhe do evento: botão "Inscrever-se". Se o entusiasta for
+colecionador, um select opcional "levar um carro" com os carros da garagem.
+Sucesso: mostrar status CONFIRMADA e os dados da inscrição.
+[DADOS] POST /api/carshub/entusiastas/inscricoes
+Body: { "idEvento": "<uuid>", "idCarro": null | "<uuid>" }
+201: { "idInscricao": "<uuid>", "nomeEvento": "...", "nomeEntusiasta": "...",
+      "carroVinculado": "marca modelo (PLACA)" | "Sem veículo vinculado",
+      "status": "CONFIRMADA", "dataInscricao": "..." }
+[REGRAS/ERROS]
+- Evento não ATIVO → 422 "As inscrições para este evento estão fechadas ou o evento foi cancelado."
+- Já inscrito (CONFIRMADA) → 422 "Você já possui uma inscrição ativa para este evento."
+- Lotação → 422 "Infelizmente o limite de participantes deste evento já foi atingido (Lotação Esgotada)."
+- Evento inexistente → 404 "Evento não encontrado."
+- Carro informado de outro dono → 403 "Acesso Negado: Este veículo não pertence à sua coleção."
+- Carro inexistente → 404 "Carro não encontrado."
+- Entusiasta inexistente → 404 "Sessão inválida: Usuário não encontrado."
+
+F12 — MINHAS INSCRIÇÕES E CANCELAMENTO
+[JORNADA] Entusiasta vê a lista das suas inscrições e pode cancelar (devolvendo
+a vaga do evento).
+[TELAS] Tela "Minhas inscrições": lista (SEM paginação) com nome do evento,
+status (CONFIRMADA/CANCELADA), data da inscrição e carro vinculado; botão
+"Cancelar inscrição" nos itens CONFIRMADA (com diálogo de confirmação).
+Após cancelar: "Inscrição cancelada com sucesso. A vaga foi devolvida ao evento."
+[DADOS]
+GET /api/carshub/entusiastas/inscricoes → 200: lista de InscricaoResponseDTO
+PATCH /api/carshub/entusiastas/inscricoes/{idInscricao}/cancelar → 200 texto
+[REGRAS/ERROS]
+- Cancelar inscrição de outro → 403 "Acesso Negado: Esta inscrição não pertence a você."
+- Já cancelada → 422 "Esta inscrição já se encontra cancelada."
+- Inexistente → 404 "Inscrição não encontrada."
+- O cancelamento NÃO apaga a inscrição: muda status para CANCELADA e libera a vaga.
+
+--------------------------------------------------------------------------------
+4.3 COLECIONADOR
+--------------------------------------------------------------------------------
+(O colecionador é um entusiasta com garagem: mantém TODOS os fluxos F7-F12 do
+entusiasta e ganha os fluxos abaixo.)
+
+F13 — GARAGEM (CRUD DE CARROS)
+[JORNADA] Gestão da garagem: cadastrar o 1º carro (vira colecionador), listar,
+ver detalhe, editar e excluir (o último carro devolve o título de entusiasta).
+
+[TELAS]
+- "Minha garagem" (lista): cards com idCarro, marca, modelo, placa,
+  nomeProprietario; paginação (envelope padrão); botão "Adicionar carro";
+  botão "ver/editar/excluir" em cada card. Garagem vazia: mensagem de estado
+  vazio + CTA "Cadastre seu primeiro carro".
+- "Cadastrar carro": formulário completo com TODOS os campos abaixo + upload de
+  até 2 fotos (jpg/jpeg/png).
+- "Detalhe do carro": ⚠️ o backend devolve APENAS idCarro, marca, modelo, placa
+  e nomeProprietario (as demais 26 características e as fotos NÃO vêm no detalhe
+  — ver seção 7). Mostrar esses 4 dados + botões de edição/exclusão.
+- "Editar carro": PUT (formulário completo) ou PATCH (campos opcionais).
+  As fotos atuais não podem ser pré-carregadas do backend (não são retornadas).
+
+[DADOS/ENDPOINTS]
+1) POST /api/carshub/colecionador/carros  (multipart/form-data)
+   Part "dados" (JSON CarroRegistroDTO):
+   { "marca": "...", "modelo": "...", "carroceria": "SEDA", "ano": 2015,
+     "cor": "...", "quantidadeCilindros": 4, "motor": "LINHA",
+     "litragemMotor": 1.6, "injecao": "ELETRONICA", "alimentacao": "TURBO",
+     "combustivel": "FLEX", "cambio": "MANUAL", "tracao": "DIANTEIRA",
+     "suspencao": "FIXA", "freio": "DISCO", "direcao": "HIDRAULICA",
+     "roda": "LIGA_LEVE", "aro": 17, "numeroPortas": 4, "numeroAssentos": 5,
+     "materialRevestimentoInterno": "TECIDO", "placa": "ABC1D23",
+     "vidrosEletricos": true, "som": true, "arCondicionado": true,
+     "tetoSolar": false, "urlFotoCarro": [] }
+   Part "arquivos" (opcional, até 2): as fotos.
+   201 → { "idCarro": "<uuid>", "marca": "...", "modelo": "...",
+           "placa": "...", "nomeProprietario": "..." }
+2) GET /api/carshub/colecionador/carros?pagina=0&tamanho=5 → envelope de
+   CarroRespostaDTO (mesmos 4 campos), ordenado por id.
+3) GET /api/carshub/colecionador/carros/{idCarro} → CarroRespostaDTO (4 campos).
+4) PUT /api/carshub/colecionador/carros/{idCarro} → body JSON igual ao
+   CarroRegistroDTO (todos os campos obrigatórios, inclusive urlFotoCarro).
+   200 → CarroRespostaDTO.
+5) PATCH /api/carshub/colecionador/carros/{idCarro} → body com apenas os campos
+   a alterar (todos opcionais; fotosCarro é a lista de URLs). 200 → CarroRespostaDTO.
+6) DELETE /api/carshub/colecionador/carros/{idCarro} → 204 sem corpo.
+
+[REGRAS/ERROS]
+- 1º carro → vira colecionador; excluir o ÚLTIMO carro → volta a ser entusiasta
+  (o app deve refletir isso: esconder garagem/serviços do usuário que voltou a
+  ser entusiasta).
+- Placa: 7 alfanuméricos, única no sistema. Duplicada → 409
+  "Esta placa já está registrada em outro veículo no CarsHub." (criação) /
+  "A nova placa informada já está registrada em outro veículo." (edição).
+- Máximo 2 fotos → 400 "É permitido enviar no máximo 2 fotos por carro."
+  (limite só no POST; o PATCH aceita "fotosCarro" como lista de URLs e
+  SUBSTITUI a lista sem revalidar o limite).
+- O PUT NÃO altera as fotos do carro (só os demais campos); fotos novas entram
+  apenas no POST.
+- Faixas obrigatórias (400 com mapa de erros por campo): ano ≥ 1886;
+  cilindros 1..16; litragem 0,049..15,000; aro 8..32; portas 1..5; assentos 1..50.
+- Carro de outro dono → 403 "Acesso Negado: Este veículo não pertence à sua coleção."
+- Carro inexistente → 404 "Carro não encontrado."
+- ⚠️ Campo urlFotoCarro do DTO: é obrigatório na validação (@NotNull), porém o
+  backend NÃO o usa para persistir (as fotos entram apenas pelo part "arquivos"
+  no POST). No POST e no PUT envie a lista (pode ser vazia no POST).
+
+F14 — SOLICITAR SERVIÇO MECÂNICO
+[JORNADA] Colecionador abre um chamado de mecânica (leilão inverso): escolhe o
+veículo da garagem, marca os serviços, informa a localização da ocorrência.
+O chamado nasce SOLICITADO e fica visível para os mecânicos compatíveis.
+
+[TELAS] Tela "Novo serviço mecânico":
+- Select do veículo (da garagem — os cards só dão marca/modelo/placa).
+- Checkboxes dos serviços ofertados (enum ServicosOfertados, no mínimo 1).
+- Localização da ocorrência (explicar a prioridade): botão "Usar meu GPS"
+  (preenche latitude/longitude) OU campo "endereço" textual; se nada for
+  informado, o backend usa a localização do perfil (cadastrada em F8).
+- Botão "Solicitar". Sucesso: mostrar o chamado criado e, se
+  quantidadeMecanicosElegiveis = 0, avisar "nenhum mecânico compatível agora".
+- Exibir as datas do fluxo (dataHoraSolicitacao etc.) e o status SOLICITADO.
+
+[DADOS] POST /api/carshub/colecionador/servicos/mecanicos
+Body: { "idCarro": "<uuid>", "servicosOfertados": ["TROCA_DE_OLEO"],
+        "latitude": null|-23.55, "longitude": null|-46.63, "endereco": null|"..." }
+201 → ServicoRespostaDTO (ver contrato completo em F17).
+
+[REGRAS/ERROS]
+- Sem garagem → 422 "Apenas colecionadores podem solicitar serviços. Cadastre um veículo na sua garagem para começar."
+- Carro de outro → 403; carro inexistente → 404; idCarro ausente → 400.
+- Sem serviços → 400 "Informe pelo menos um serviço a ser realizado no veículo."
+- Duplicata (mesmo carro + mesmos serviços com chamado ativo) → 409
+  "Você já tem uma solicitação ativa idêntica (mesmo veículo e mesmos serviços). Finalize ou cancele a anterior para abrir outra."
+  (No GUINCHO a mensagem é: "Você já tem uma solicitação de guincho ativa para
+  este veículo. Finalize ou cancele a anterior para abrir outra.")
+- Cooldown 5 min entre solicitações (mecânico+guincho juntos) → 422
+  "Aguarde X minuto(s)/segundo(s) para solicitar um novo serviço."
+- Localização: GPS (lat+long juntas; uma sem a outra → 400 "Informe latitude e
+  longitude juntas: o par de coordenadas é obrigatório.") > endereço digitado
+  (geocodificação bloqueante: endereço não achado → 422; mapas fora → 502/503/504)
+  > perfil > erro 422 "Informe a localização da ocorrência (latitude e longitude
+  do GPS ou o endereço) — ou atualize a localização do seu perfil."
+- Coordenadas fora da faixa → 400 ("A latitude deve estar entre -90 e 90." /
+  "A longitude deve estar entre -180 e 180.").
+
+F15 — SOLICITAR GUINCHO
+[JORNADA] Igual a F14, sem catálogo de serviços.
+[TELAS] Tela "Novo guincho": select do veículo + localização da ocorrência
+(mesma prioridade GPS > endereço > perfil) + botão solicitar.
+[DADOS] POST /api/carshub/colecionador/servicos/guinchos
+Body: { "idCarro": "<uuid>", "latitude": null|..., "longitude": null|...,
+        "endereco": null|"..." }
+201 → ServicoRespostaDTO (quantidadeMecanicosElegiveis vem null no guincho).
+[REGRAS/ERROS] Mesmas de F14, exceto serviços. Obs.: TODO guincho ativo é
+elegível para o chamado de guincho. A duplicidade (mesmo carro) → 409
+"Você já tem uma solicitação de guincho ativa para este veículo. Finalize ou
+cancele a anterior para abrir outra."; chamado de guincho inexistente → 404
+"Solicitação de guincho não encontrada."
+
+F16 — MEUS CHAMADOS (LISTAS)
+[JORNADA] Colecionador acompanha suas solicitações.
+[TELAS]
+- Painel consolidado (padrão): GET /colecionador/servicos — junta mecânicos e
+  guinchos com status ≠ FINALIZADO, ordenado por dataHoraSolicitacao (mais
+  recente primeiro). Card por chamado: tipo (MECANICO/GUINCHO), status,
+  carroDescricao, serviços (mecânico), valorProposto quando houver, datas.
+  Paginação (corte em memória, envelope padrão).
+- Lista específica de mecânica: GET /colecionador/servicos/mecanicos
+  (?somenteAbertos=true|false — default true = sem FINALIZADO; false = tudo).
+  Ordenada por dataHoraSolicitacao desc. Paginada no banco.
+- Idem para guinchos: GET /colecionador/servicos/guinchos.
+[REGRAS/ERROS] 404 "Sessão inválida: Entusiasta não encontrado." se user-id inválido.
+
+F17 — DETALHE DO CHAMADO (ServicoRespostaDTO — CONTRATO COMPLETO)
+[TELAS] Tela de detalhe com as SEÇÕES abaixo, sempre dirigidas pelo status.
+Campos retornados (todos, sempre no JSON; null quando não se aplica):
+{
+  "idServico": "<uuid>", "tipoServico": "MECANICO"|"GUINCHO",
+  "status": "SOLICITADO"|"PROPOSTA"|"PENDENTE"|"CHEGOU"|"FINALIZADO",
+  "valorProposto": 120.00|null,
+  "idEntusiasta": "...", "nomeEntusiasta": "...", "telefoneEntusiasta": null|"...",
+  "idPrestador": null|"...", "nomePrestador": null|"...",
+  "telefonePrestador": null|"...",
+  "idCarro": "...", "carroDescricao": "Marca Modelo (PLACA)",
+  "servicosSolicitados": ["TROCA_DE_OLEO", ...],
+  "quantidadeMecanicosElegiveis": 3|null,
+  "latitudeEntusiasta": -23.55, "longitudeEntusiasta": -46.63,
+  "enderecoOcorrencia": "Rua X, 10 - Bairro"|null,
+  "enderecoEstruturado": { "rua","numero","bairro","cidade","estado","cep","placeId" | null },
+  "latitudePrestador": null|..., "longitudePrestador": null|...,
+  "urlFotoInicial": null|"http://localhost:8080/uploads/...",
+  "confirmacaoChegadaEntusiasta": false, "confirmacaoChegadaPrestador": false,
+  "dataHoraChegou": null|"...",
+  "urlFotoFinalEntusiasta": null|"...", "urlFotoFinalPrestador": null|"...",
+  "notaAvaliacaoEntusiasta": null|5, "comentarioAvaliacaoEntusiasta": null|"...",
+  "dataHoraAvaliacaoEntusiasta": null|"...",
+  "notaAvaliacaoPrestador": null|5, "comentarioAvaliacaoPrestador": null|"...",
+  "dataHoraAvaliacaoPrestador": null|"...",
+  "confirmacaoConclusaoEntusiasta": false, "confirmacaoConclusaoPrestador": false,
+  "dataHoraSolicitacao": "...", "dataHoraProposta": null|"...",
+  "dataHoraPendente": null|"...", "dataHoraFinalizacao": null|"...",
+  "notaMatch": null|87, "notaMediaPrestador": null|4.17,
+  "quantidadeAvaliacoes": null|3, "distanciaAteOcorrencia": null|2.65,
+  "servicosAtivosDoPrestador": null|0|1
+}
+REGRAS DE EXIBIÇÃO:
+- Telefones (entusiasta/prestador) só vêm preenchidos a partir de PENDENTE
+  (em SOLICITADO/PROPOSTA vêm null — o frontend deve esconder/omitir).
+- quantidadeMecanicosElegiveis: null no guincho; 0 = avisar "nenhum mecânico
+  compatível no momento".
+- notaMatch/notaMediaPrestador/quantidadeAvaliacoes/distanciaAteOcorrencia/
+  servicosAtivosDoPrestador: null enquanto não houver prestador vinculado.
+- Preço: exibir com 2 casas decimais (R$).
+
+F18 — ACEITAR / REJEITAR PROPOSTA
+[JORNADA] Chamado em PROPOSTA (um prestador enviou valor): o colecionador
+aceita (o chamado vai para PENDENTE — prestador a caminho) ou rejeita (o
+chamado volta para a rede SOLICITADO; outro prestador pode propor).
+[TELAS] No detalhe em PROPOSTA: mostrar nome do prestador, valor proposto,
+notaMatch/nota média/quantidade de avaliações/distância (campos do match);
+botões "Aceitar" e "Rejeitar" (com confirmação).
+[DADOS]
+PATCH /api/carshub/colecionador/servicos/mecanicos/{idServico}/aceitar-proposta
+  → 200 ServicoRespostaDTO (status PENDENTE, dataHoraPendente preenchida)
+PATCH /api/carshub/colecionador/servicos/mecanicos/{idServico}/rejeitar-proposta
+  → 200 ServicoRespostaDTO (status SOLICITADO, prestador/valor limpos)
+(Idem com /guinchos/.)
+[REGRAS/ERROS]
+- Não está em PROPOSTA → 422 "Não há proposta aguardando decisão nesta solicitação." (aceitar) /
+  "Não há proposta para recusar nesta solicitação." (rejeitar).
+- Estado mudou concorrentemente → 422 "A solicitação mudou de estado enquanto você decidia. Atualize a tela e tente novamente."
+- Ao aceitar: se o prestador atingir a cota de 2 ativos, as demais propostas
+  abertas dele voltam sozinhas para a rede (efeito invisível para este chamado).
+
+F19 — FOTO INICIAL (evidência do estado do veículo)
+[JORNADA] Depois do aceite (PENDENTE), o colecionador fotografa o estado atual
+do veículo. A foto é IMUTÁVEL (não pode ser trocada).
+[TELAS] No detalhe em PENDENTE: seção "Foto inicial" — se urlFotoInicial vazia,
+botão "enviar foto" (câmera/galeria, 1 arquivo); depois, exibir a imagem
+(thumbnail + link) e marcar como concluída (sem botão de reenviar).
+[DADOS] POST /api/carshub/colecionador/servicos/mecanicos/{idServico}/foto-inicial
+multipart, campo "arquivo". 200 → ServicoRespostaDTO.
+[REGRAS/ERROS]
+- Status ≠ PENDENTE → 422 "A foto inicial é enviada depois do aceite da proposta (PENDENTE)."
+- Já enviada → 422 "A foto inicial já foi enviada e não pode ser substituída."
+- Sem arquivo → 400 "Envie o arquivo da a foto inicial do veículo."
+- É pré-requisito para confirmar a chegada.
+
+F20 — CONFIRMAR CHEGADA (lado do colecionador)
+[JORNADA] Com o chamado em PENDENTE e a foto inicial enviada, cada parte
+confirma que o prestador chegou. Quando AMBAS confirmam, o status vira CHEGOU
+e dataHoraChegou é gravada.
+[TELAS] No detalhe em PENDENTE: checklist de chegada mostrando os dois lados
+(confirmacaoChegadaEntusiasta / confirmacaoChegadaPrestador — o lado do
+prestador só aparece após o vínculo); botão "Confirmar chegada" enquanto o
+próprio lado não confirmou; depois, rótulo "aguardando o mecânico".
+Em CHEGOU: mostrar dataHoraChegou.
+[DADOS] PATCH /api/carshub/colecionador/servicos/mecanicos/{idServico}/confirmar-chegada → 200 DTO.
+[REGRAS/ERROS]
+- Status ≠ PENDENTE → 422 "Só é possível confirmar a chegada de um serviço que está em execução (PENDENTE)."
+- Sem foto inicial → 422 "O colecionador precisa enviar a foto inicial do veículo antes da confirmação de chegada."
+- Já confirmou → 422 "Você já confirmou a chegada. Aguardando a confirmação do mecânico."
+- Chamado de outro dono → 403.
+
+F21 — FOTO FINAL (lado do colecionador)
+[JORNADA] Em CHEGOU, cada lado fotografa o serviço concluído (1 foto por lado).
+[TELAS] No detalhe em CHEGOU: seção "Foto final" com o estado do meu lado
+(enviada/não) e, depois, a imagem.
+[DADOS] POST /api/carshub/colecionador/servicos/mecanicos/{idServico}/foto-final
+multipart "arquivo". 200 → DTO.
+[REGRAS/ERROS]
+- Status ≠ CHEGOU → 422 "Esta etapa é liberada depois que as duas partes confirmarem a chegada (CHEGOU)."
+- Já enviou → 422 "Você já enviou a foto final deste serviço."
+- Sem arquivo → 400.
+
+F22 — AVALIAR O PRESTADOR (lado do colecionador)
+[JORNADA] Em CHEGOU, depois de enviar a SUA foto final, o colecionador avalia o
+mecânico/guincho: nota 1..5 obrigatória + comentário opcional (até 500).
+Imutável (não pode editar depois).
+[TELAS] No detalhe em CHEGOU: seção "Avaliar o mecânico" — estrelas 1..5 +
+campo de texto opcional (máx 500, com contador); enviar. Depois: exibir nota,
+comentário e dataHoraAvaliacaoEntusiasta (somente leitura).
+[DADOS] POST /api/carshub/colecionador/servicos/mecanicos/{idServico}/avaliacao
+Body: { "nota": 5, "comentario": "..."|null }
+200 → DTO.
+[REGRAS/ERROS]
+- Status ≠ CHEGOU → 422 (mesma mensagem da foto final).
+- Sem a própria foto final → 422 "Envie a sua foto final antes de avaliar o mecânico." (guincho: "...avaliar o guincho.")
+- Já avaliou → 422 "Você já avaliou este serviço."
+- Nota fora de 1..5 → 400 (mapa de erros); comentário > 500 → 400.
+
+F23 — CONFIRMAR CONCLUSÃO (lado do colecionador)
+[JORNADA] Em CHEGOU, com a própria foto final enviada e a própria avaliação
+feita, cada lado confirma a conclusão. Quando AMBOS confirmam → FINALIZADO,
+dataHoraFinalizacao gravada, chave de idempotência liberada (permite nova
+solicitação idêntica) e a reputação do prestador é atualizada.
+[TELAS] No detalhe em CHEGOU: checklist de conclusão (confirmacaoConclusao
+Entusiasta/Prestador); botão "Confirmar conclusão" habilitado somente quando a
+sua foto final e a sua avaliação já existirem; senão mostrar os pré-requisitos
+faltantes. Em FINALIZADO: mostrar dataHoraFinalizacao e estado concluído.
+[DADOS] PATCH /api/carshub/colecionador/servicos/mecanicos/{idServico}/confirmar-conclusao → 200 DTO.
+[REGRAS/ERROS]
+- Status ≠ CHEGOU → 422 "Só é possível confirmar a conclusão de um serviço que chegou ao local (CHEGOU)."
+- Sem a própria foto final → 422 "Você precisa enviar a foto final antes de confirmar a conclusão."
+- Sem a própria avaliação → 422 "Você precisa avaliar a outra parte antes de confirmar a conclusão."
+- Já confirmou → 422 "Você já confirmou a conclusão deste serviço."
+
+F24 — CANCELAR CHAMADO
+[JORNADA] Só o colecionador cancela; o cancelamento é remoção FÍSICA do chamado.
+Regras por estado:
+- SOLICITADO / PROPOSTA: cancela na hora.
+- PENDENTE: somente depois de 2 horas contadas de dataHoraPendente.
+- CHEGOU / FINALIZADO: bloqueado.
+[TELAS] No detalhe: botão "Cancelar solicitação" (com confirmação) visível
+apenas nos estados permitidos; em PENDENTE antes das 2 h, mostrar o tempo
+restante informado pelo backend e desabilitar o botão.
+[DADOS] DELETE /api/carshub/colecionador/servicos/mecanicos/{idServico} → 204.
+[REGRAS/ERROS]
+- CHEGOU/FINALIZADO → 422 "Um serviço que já chegou ou foi finalizado não pode ser cancelado. Use a confirmação de conclusão."
+- PENDENTE < 2 h → 422 "O mecânico ainda está a caminho. O cancelamento fica disponível em X minuto(s)." (guincho: "O guincho ainda está a caminho...")
+- Chamado de outro → 403 "Acesso Negado: Esta solicitação não pertence a você."
+- Não encontrado → 404 "Solicitação de serviço não encontrada."
+
+F25 — PAINEL CONSOLIDADO (ver F16) — GET /colecionador/servicos.
+
+F26 — RANKING DE PRESTADORES COMPATÍVEIS
+[JORNADA] No detalhe de um chamado, o colecionador vê a lista ordenada dos
+prestadores que podem atendê-lo: mecânicos elegíveis (congelados na criação) ou
+guinchos ativos, SEM os de cota cheia (2 ativos) e SEM os sem coordenadas.
+Ordem: notaMatch desc → notaAjustada desc → distância asc → nome alfabético.
+[TELAS] Tela/aba "Prestadores compatíveis" no detalhe do chamado:
+- Card por prestador: nome, tipo (MECANICO/GUINCHO), notaAjustada (2 casas),
+  quantidadeAvaliacoes, distanciaKm, notaMatch (0..100, destaque).
+- Ordenar exatamente como o backend devolve (já vem ordenado).
+- Paginação: envelope padrão (corte em memória).
+[DADOS]
+GET /api/carshub/colecionador/servicos/{idServico}/prestadores-compativeis?pagina=0&tamanho=5
+→ envelope de { "idPrestador","tipoPrestador","nomePrestador","notaAjustada",
+                 "quantidadeAvaliacoes","distanciaKm","notaMatch" }
+[REGRAS/ERROS]
+- Chamado de outro dono → 403 "Acesso Negado: Esta solicitação não pertence a você."
+- Chamado inexistente (nos dois tipos) → 404 "Solicitação de serviço não encontrada."
+
+F27 — HISTÓRICO DE MANUTENÇÕES DO VEÍCULO
+[JORNADA] Na garagem, o colecionador vê o histórico de serviços FINALIZADO do
+carro (mecânico + guincho mesclados), do mais recente para o mais antigo.
+[TELAS] Tela "Histórico do veículo" (acessada pelo card do carro): lista
+paginada com tipoServico, nomePrestador, servicosRealizados (lista; vazia no
+guincho), enderecoOcorrencia, valorProposto, dataHoraFinalizacao.
+[DADOS]
+GET /api/carshub/colecionador/carros/{idCarro}/historico-manutencoes?pagina=0&tamanho=5
+→ envelope de { "idServico","tipoServico","nomePrestador","servicosRealizados",
+                 "enderecoOcorrencia","valorProposto","dataHoraFinalizacao" }
+[REGRAS/ERROS]
+- Carro de outro → 403 "Acesso Negado: Este veículo não pertence à sua coleção."
+- Carro inexistente → 404 "Carro não encontrado."
+- idCarro ausente na URL → 400 "O ID do carro é obrigatório para consultar o histórico."
+
+--------------------------------------------------------------------------------
+4.4 ORGANIZADOR DE EVENTOS
+--------------------------------------------------------------------------------
+
+F28 — PERFIL / FOTO / SENHA (ORGANIZADOR)
+[REGRAS] Igual aos fluxos do entusiasta F7/F9/F10, com as rotas
+/api/carshub/organizadores/* e mensagens "...do organizador...".
+- Perfil: nome (até 100) + telefone (até 17). Não há rota de localização.
+- Erros 404: "Sessão inválida: Organizador não encontrado."
+
+F29 — CRIAR EVENTO (com geocodificação)
+[JORNADA] O organizador cria um evento com endereço digitado; o backend
+geocodifica o endereço (bloqueante) para obter o pino do mapa, e salva até 3
+fotos. Sem coordenadas o evento não é criado.
+
+[TELAS] Tela "Novo evento":
+- nome (até 50), descrição (até 1000), preço (≥ 0,00, 2 casas), limite de
+  participantes (≥ 1).
+- Endereço: rua (até 100, obrigatória), número (até 10, obrigatório),
+  complemento (até 50, opcional), bairro (até 50, obrigatório).
+  ⚠️ NÃO há campos de cidade/UF/CEP no cadastro: o endereço montado para a
+  geocodificação é "rua, numero - bairro".
+- Data/hora de início e fim (devem ser NO FUTURO e fim > início).
+- Upload de até 3 fotos (jpg/jpeg/png).
+- Botão "Criar evento". Indicador de carregamento: a geocodificação é
+  bloqueante (pode levar segundos).
+- Sucesso: mostrar os dados do evento, incluindo latitude/longitude (pino no
+  mapa) e status ATIVO.
+
+[DADOS] POST /api/carshub/organizadores/eventos (multipart/form-data)
+Part "dados" (JSON EventoRegistroDTO):
+{ "nome": "...", "descricao": "...", "preco": 0.00, "limiteParticipantes": 50,
+  "rua": "...", "numero": "...", "complemento": null|"...", "bairro": "...",
+  "dataHoraInicio": "2026-11-01T10:00:00", "dataHoraFim": "2026-11-01T18:00:00",
+  "urlFotoEvento": null|[...] }
+Part "arquivos" (opcional, até 3).
+201 → EventoRespostaDTO:
+{ "idEvento", "nome", "preco", "descricao", "limiteParticipantes",
+  "rua", "numero", "complemento", "bairro", "latitude", "longitude",
+  "status": "ATIVO", "nomeOrganizador", "dataHoraInicio", "dataHoraFim" }
+(⚠️ as fotos NÃO vêm na resposta.)
+
+[REGRAS/ERROS]
+- Datas no passado (criação) → 400 via @Future ("A data de início deve estar no futuro").
+- fim ≤ início → 422 "A data/hora de término do evento não pode ser igual ou anterior à data de início."
+- Mais de 3 fotos → 400 "É permitido enviar no máximo 3 fotos por evento."
+- Endereço não encontrado no mapa → 422 "Não encontramos esse endereço no mapa. Revise o texto informado ou envie latitude e longitude do GPS."
+- Mapas fora/chave ausente/timeout → 502/503/504 (mensagens prontas).
+- Organizador inexistente → 404 "Sessão inválida: Organizador não encontrado."
+- A geocodificação roda ANTES do upload: falha de endereço não deixa fotos órfãs.
+
+F30 — MEUS EVENTOS / DETALHE
+[TELAS] Tela "Meus eventos": lista paginada (envelope) ordenada por
+dataHoraInicio desc; card com nome, status, datas, preço, bairro. Ações:
+ver, editar, mudar status, excluir. Detalhe: todos os campos do
+EventoRespostaDTO (+ pino no mapa com latitude/longitude).
+[DADOS]
+GET /api/carshub/organizadores/eventos?pagina&tamanho → envelope de EventoRespostaDTO
+GET /api/carshub/organizadores/eventos/{idEvento} → EventoRespostaDTO
+[REGRAS/ERROS]
+- Evento de outro organizador → 403 "Acesso Negado: Você não tem permissão para modificar um evento que pertence a outro organizador."
+- Inexistente → 404 "Evento não encontrado no sistema."
+
+F31 — EDITAR EVENTO (PUT / PATCH)
+[JORNADA] PUT substitui tudo (todas as datas/endereço obrigatórios; sem @Future
+no PUT — a regra é apenas fim > início e não mudar início de evento já
+começado); PATCH altera apenas o enviado.
+[TELAS] Formulário pré-preenchido com os dados do detalhe; em PATCH, campos
+vazios = não alterar. Ao mudar rua/número/bairro, avisar que o endereço será
+re-geocodificado (PATCH só re-geocodifica se o endereço realmente mudou).
+[DADOS]
+PUT  /api/carshub/organizadores/eventos/{idEvento}  Body = EventoPutDTO (igual
+     ao RegistroDTO, sem @Future; urlFotoEvento opcional)
+PATCH /api/carshub/organizadores/eventos/{idEvento} Body = campos opcionais
+     (nome, descricao, preco, limiteParticipantes, rua, numero, complemento,
+     bairro, dataHoraInicio, dataHoraFim, urlFotoEvento)
+200 → EventoRespostaDTO.
+[REGRAS/ERROS]
+- fim ≤ início → 422 (mesma mensagem).
+- Mudar dataHoraInicio de evento já começado → 422 "Não é possível alterar a data de início de um evento que já começou."
+- Geocodificação: PUT sempre recalcula; PATCH recalcula só se rua/numero/bairro mudaram.
+- ⚠️ PATCH NÃO tem validação de DTO (Bean Validation): campos inválidos só são
+  pegos na persistência da entidade (400 via TransactionSystemException) —
+  pré-validar no frontend (tamanhos de nome 50/descrição 1000/rua 100/número 10/
+  complemento 50/bairro 50, preço ≥ 0, limite ≥ 1).
+- Concorrência (@Version) → 409 "Este registro foi alterado por outra pessoa enquanto você o editava. Atualize a tela e tente novamente."
+
+F32 — MUDAR STATUS DO EVENTO
+[JORNADA] O organizador altera o status do evento manualmente.
+[TELAS] No detalhe/lista: seletor de status com os 5 valores
+(ATIVO, ESPERA, INATIVO, CANCELADO, CONCLUIDO) + botão aplicar.
+[DADOS] PATCH /api/carshub/organizadores/eventos/{idEvento}/status?novoStatus=CANCELADO
+→ 200 EventoRespostaDTO com o novo status.
+[REGRAS/ERROS]
+- Sem validação de transição (qualquer valor do enum é aceito pelo endpoint;
+  valor fora do enum → 400 parâmetro inválido).
+- Posse → 403; inexistente → 404.
+
+F33 — EXCLUIR EVENTO
+[DADOS] DELETE /api/carshub/organizadores/eventos/{idEvento} → 204.
+[REGRAS/ERROS] Posse → 403; inexistente → 404. A exclusão é física.
+⚠️ Se o evento JÁ TEM INSCRIÇÕES, a exclusão falha com 409 "Os dados informados
+conflitam com um registro já existente." (a FK de Inscricao bloqueia). A tela
+deve orientar: cancelar as inscrições ou usar o status CANCELADO em vez de
+excluir.
+OBS: uma task automática (a cada 30 min) conclui eventos ATIVO com dataHoraFim
+no passado → o organizador pode ver o evento virar CONCLUIDO sozinho.
+
+F34 — DASHBOARD DO ORGANIZADOR
+[JORNADA] Visão gerencial: métricas gerais e histórico de eventos encerrados.
+[TELAS] Tela "Dashboard":
+- Cards de métricas: "Eventos criados" (totalEventosCriados) e "Participantes
+  mobilizados" (totalParticipantesMobilizados).
+- Lista "Histórico": eventos CONCLUIDO + CANCELADO mesclados (mais recente
+  dataHoraFim primeiro), paginada; cada item: nome, status, limiteVagas,
+  totalParticipantes.
+[DADOS]
+GET /api/carshub/organizadores/dashboard/metricas
+→ { "totalEventosCriados": 4, "totalParticipantesMobilizados": 37 }
+GET /api/carshub/organizadores/dashboard/historico?pagina=0&tamanho=5
+→ envelope de { "idEvento","nome","status","limiteVagas","totalParticipantes" }
+[REGRAS/ERROS]
+- Organizador inexistente → 404 "Sessão inválida: Organizador não encontrado." /
+  "Sessão inválida."
+- totalParticipantesMobilizados = inscrições CONFIRMADA de todos os eventos do organizador.
+- totalParticipantes do histórico conta TODAS as inscrições do evento
+  (inclusive CANCELADA).
+
+--------------------------------------------------------------------------------
+4.5 MECÂNICO (PRESTADOR)
+--------------------------------------------------------------------------------
+
+F35 — PERFIL / LOCALIZAÇÃO / FOTO / SENHA (MECÂNICO)
+[REGRAS]
+- Perfil (PUT): nome + telefone + servicosOfertados (lista NÃO vazia — 400
+  "A lista de serviços ofertados não pode ser vazia").
+- Perfil (PATCH): nome, telefone e/ou servicosOfertados (só se não vazio).
+- Localização: PUT /mecanicos/localizacao com latitude E longitude (os dois
+  obrigatórios → 400 "Informe latitude e longitude para atualizar a localização.").
+  A localização do perfil é o centro padrão do painel /disponiveis.
+- Foto perfil e senha: como o entusiasta (rotas /mecanicos/...).
+- Perfil errado (id de guincho/entusiasta) → 403 "Acesso Negado: O perfil selecionado não é de um Mecânico."
+- Não encontrado → 404 "Sessão inválida: Mecânico não encontrado."
+
+F36 — PAINEL DE CHAMADOS DISPONÍVEIS
+[JORNADA] O mecânico vê os chamados SOLICITADO da região que ele pode atender
+(só aqueles em que ele está na lista de elegíveis gravada na criação — mecânicos
+que ofertam TODOS os serviços do chamado).
+
+[TELAS] Tela "Chamados disponíveis":
+- Filtro de busca: raioKm (opcional, default 50), origem da busca — botão
+  "usar meu GPS" (latitude/longitude) ou campo endereço; se nada informado,
+  usa a localização do perfil (cadastrada em F35).
+- Card por chamado: nomeEntusiasta, distanciaKm, carroDescricao, lista de
+  servicosSolicitados (chips), notaMatch (badge 0..100, INFORMACIONAL — pode
+  ser null quando o mecânico não tem coordenadas no perfil). NÃO expõe valor,
+  telefone nem status interno.
+- Ordem: distância ascendente; empate → nome do entusiasta (alfabético).
+  (Já vem ordenado do backend; a paginação é o envelope padrão com corte em memória.)
+- Botão "Enviar proposta" em cada card (leva a F39).
+[DADOS]
+GET /api/carshub/mecanicos/servicos/disponiveis?raioKm=50&latitude=&longitude=&endereco=&pagina=0&tamanho=5
+→ envelope de { "idServico","nomeEntusiasta","distanciaKm","servicosSolicitados",
+                 "carroDescricao","notaMatch" }
+[REGRAS/ERROS]
+- Raio ≤ 0 → 400 "O raio de busca deve ser maior que zero."
+- Sem origem de busca (nem GPS, nem endereço, nem perfil) → 422 "Cadastre a sua localização (PUT /api/carshub/mecanicos/localizacao) ou informe latitude/longitude ou o endereço na requisição para ver os chamados da sua região."
+- Endereço não encontrado → 422; mapas fora → 502/503/504.
+- Lat sem long (ou vice-versa) → 400 "Informe latitude e longitude juntas: o par de coordenadas é obrigatório."
+- Perfil errado → 403; não encontrado → 404.
+
+F37 — FILA DE TRABALHO
+[JORNADA] Todos os chamados em que o mecânico está vinculado (propostas
+enviadas, aceitas, em andamento, finalizadas), mais recentes primeiro.
+[TELAS] Tela "Meus serviços": lista paginada (envelope) de ServicoRespostaDTO
+(contrato completo de F17 — aqui os campos do prestador são "você"); card com
+status, entusiasta, carro, valor, datas. Ações conforme o status.
+[DADOS] GET /api/carshub/mecanicos/servicos?pagina=0&tamanho=5 → envelope de ServicoRespostaDTO.
+[REGRAS/ERROS] Perfil errado → 403; não encontrado → 404.
+
+F38 — DETALHE DO CHAMADO (MECÂNICO)
+[DADOS] GET /api/carshub/mecanicos/servicos/{idServico} → ServicoRespostaDTO (F17).
+[REGRAS/ERROS]
+- Não participa do chamado → 403 "Acesso Negado: Você não participa desta solicitação de serviço."
+- Inexistente → 404 "Solicitação de serviço não encontrada."
+
+F39 — ENVIAR PROPOSTA
+[JORNADA] O mecânico propõe um valor (leilão inverso). O primeiro que enviar
+vence a janela: o chamado sai da rede (vira PROPOSTA) e o colecionador decide.
+[TELAS] Modal/formulário no card do chamado:
+- Campo valorProposto (moeda, > 0, até 8 inteiros + 2 decimais).
+- Opcionalmente a posição do mecânico (GPS) — senão usa a do perfil.
+- Botão "Enviar proposta".
+- Sucesso: navegar para o detalhe (status PROPOSTA).
+[DADOS] POST /api/carshub/mecanicos/servicos/{idServico}/proposta
+Body: { "valorProposto": 150.00, "latitude": null|..., "longitude": null|... }
+200 → ServicoRespostaDTO.
+[REGRAS/ERROS]
+- Chamado não está SOLICITADO → 422 "Este chamado já está em negociação com outro mecânico ou já foi atendido."
+- Não elegível → 422 "Este chamado não está disponível para você: ele exige serviços que você não oferta por completo."
+- Cota cheia (2 ativos PENDENTE/CHEGOU) → 422 "Você já está com 2 serviços em andamento (PENDENTE ou CHEGOU). Finalize um deles para aceitar novos chamados."
+- Cooldown 1 min entre propostas → 422 "Aguarde X ... para enviar uma nova proposta."
+- Sem posição (nem body nem perfil) → 422 "Atualize a sua localização (ou informe latitude e longitude na requisição) para enviar propostas."
+- 10ª/11ª proposta: chamado atingiu o limite de 10 → 422 "Este chamado já recebeu o limite de 10 propostas. Aguarde o colecionador decidir."
+- Concorrência (outro propôs primeiro) → 422 "Outro mecânico enviou uma proposta primeiro. Atualize a lista de chamados."
+- Valor ≤ 0 / formato → 400 (mapa de erros do Bean Validation).
+
+F40 — CONFIRMAR CHEGADA (MECÂNICO)
+[JORNADA] Em PENDENTE (proposta aceita) e com a foto inicial do colecionador,
+o mecânico confirma que chegou. Dupla confirmação → CHEGOU.
+[TELAS] No detalhe em PENDENTE: mesmo checklist da F20 visto pelo lado do
+prestador; botão "Confirmar chegada".
+[DADOS] PATCH /api/carshub/mecanicos/servicos/{idServico}/confirmar-chegada → 200 DTO.
+[REGRAS/ERROS]
+- Outro mecânico vinculado → 403 "Acesso Negado: Este serviço está vinculado a outro mecânico."
+- Status ≠ PENDENTE → 422 (mensagem de F20).
+- Sem foto inicial → 422 (mensagem de F20).
+- Já confirmou → 422 "Você já confirmou a chegada. Aguardando a confirmação do colecionador."
+
+F41 — FOTO FINAL (MECÂNICO)
+[REGRAS] Igual F21 pelo lado do prestador: só em CHEGOU, 1 vez
+(422 "Você já enviou a foto final deste serviço.").
+[DADOS] POST /api/carshub/mecanicos/servicos/{idServico}/foto-final (multipart "arquivo").
+
+F42 — AVALIAR O COLECIONADOR (MECÂNICO)
+[REGRAS] Em CHEGOU, exige a foto final DO MECÂNICO
+(422 "Envie a sua foto final antes de avaliar o colecionador."), 1 vez
+(422 "Você já avaliou este serviço."). Nota 1..5 + comentário opcional ≤ 500.
+[DADOS] POST /api/carshub/mecanicos/servicos/{idServico}/avaliacao  Body {nota, comentario?}.
+
+F43 — CONFIRMAR CONCLUSÃO (MECÂNICO)
+[REGRAS] Em CHEGOU, exige a própria foto final e a própria avaliação; dupla →
+FINALIZADO (reputação do mecânico atualizada no backend).
+[DADOS] PATCH /api/carshub/mecanicos/servicos/{idServico}/confirmar-conclusao → 200 DTO.
+Mensagens 422 idênticas às de F23 (com "Você ...").
+
+--------------------------------------------------------------------------------
+4.6 GUINCHO (PRESTADOR)
+--------------------------------------------------------------------------------
+TODOS os fluxos F35-F43 com as rotas /api/carshub/guinchos/... e diferenças:
+- Perfil: em vez de serviços ofertados, tem PLACA (7 alfanuméricos, única;
+  duplicada → 409 "Esta placa já está registrada para outro guincho.").
+- Painel /disponiveis: NÃO há catálogo de serviços — todo guincho ativo é
+  elegível; o campo servicosSolicitados vem VAZIO nos cards.
+- Ranking do colecionador para guincho: usa todos os guinchos ativos com cota livre.
+- ⚠️ DIFERENÇA DE PERFIL ERRADO: as rotas do guincho NÃO fazem o cheque de tipo
+  (id de mecânico/entusiasta nas rotas do guincho devolve apenas 404
+  "Sessão inválida: Guincho não encontrado." — o 403 de perfil errado só existe
+  nas rotas do MECÂNICO).
+- Chamado de guincho inexistente → 404 "Solicitação de guincho não encontrada."
+- Mensagens trocam "mecânico"→"guincho" (ex.: "Este chamado já está em negociação
+  com outro guincho ou já foi atendido.", "Outro guincho enviou uma proposta
+  primeiro. Atualize a lista de chamados.", "Envie a sua foto final antes de
+  avaliar o guincho.", "O guincho ainda está a caminho...", "Acesso Negado:
+  Este serviço está vinculado a outro guincho.").
+- Aviso do cooldown de proposta: 1 minuto, como o mecânico.
+- Cota: 2 ativos (PENDENTE/CHEGOU), igual.
+
+================================================================================
+5. REGRAS TRANSVERSAIS QUE O FRONTEND PRECISA REPRODUZIR
+================================================================================
+R1  MÁQUINA DE ESTADOS DO SERVIÇO (única): SOLICITADO → PROPOSTA → PENDENTE →
+    CHEGOU → FINALIZADO. Transições críticas são atômicas no backend; se o
+    estado mudou enquanto o usuário decidia, o backend responde 422 com
+    "A solicitação mudou de estado enquanto você decidia. Atualize a tela e
+    tente novamente." — a tela deve recarregar o detalhe nesse caso.
+R2  COTA DO PRESTADOR: no máximo 2 serviços ativos (PENDENTE ou CHEGOU) por
+    prestador. PROPOSTA não ocupa cota. Ao fechar a cota, as propostas abertas
+    dele voltam para a rede automaticamente. Chamados para o colecionador:
+    prestador com cota cheia não aparece no ranking.
+R3  COOLDOWNS (rate limiting persistido no banco):
+    - Colecionador: 1 solicitação a cada 5 minutos (mecânico e guincho somados)
+      → 422 "Aguarde X ... para solicitar um novo serviço."
+    - Mecânico/Guincho: 1 proposta a cada 1 minuto → 422 "Aguarde X ... para
+      enviar uma nova proposta."
+R4  IDEMPOTÊNCIA: chave única = hash SHA-256 de (idEntusiasta | idCarro |
+    TipoServico | serviços ordenados). Solicitação idêntica com chamado ativo →
+    409. A chave é zerada na FINALIZAÇÃO (nova solicitação idêntica volta a ser
+    aceita). No guincho a chave não inclui serviços.
+R5  LIMITE DE PROPOSTAS POR CHAMADO: 10 ao longo da vida (contador nunca
+    decrementa). 11ª → 422.
+R6  CANCELAMENTO: só colecionador; SOLICITADO/PROPOSTA na hora; PENDENTE após
+    2 h de dataHoraPendente; CHEGOU/FINALIZADO bloqueado. É DELETE físico.
+R7  EVIDÊNCIAS: foto inicial (só PENDENTE, IMUTÁVEL); foto final (só CHEGOU,
+    1 por lado); avaliação (só CHEGOU, exige foto final do próprio lado,
+    1 por lado, imutável); conclusão (só CHEGOU, exige foto final + avaliação
+    do próprio lado; dupla confirmação → FINALIZADO).
+R8  PRIVACIDADE: telefones (do entusiasta e do prestador) só são preenchidos no
+    DTO a partir de PENDENTE. No painel /disponiveis o prestador nunca vê
+    telefone nem valor do chamado.
+R9  GEOLOCALIZAÇÃO: prioridade GPS informado > endereço digitado (geocodificação
+    direta bloqueante) > localização do perfil > 422. Geocodificação reversa é
+    best-effort (falha não quebra o chamado; enderecoEstruturado fica vazio).
+    Coordenadas normalizadas a 7 casas (WGS84). Raio padrão 50 km.
+    Falhas da geocodificação (exibir a mensagem do backend): endereço não
+    achado → 422; chave do Google ausente/recusada → 502; timeout → 504;
+    serviço fora/sem cota → 503. Cota mensal do Google: 40.000/mês (o bloqueio
+    por cota está DESATIVADO por padrão — só loga).
+R10 TASKS AUTOMÁTICAS (o frontend deve prever que os dados mudam sozinhos):
+    - SOLICITADO há mais de 3 h → removido (de hora em hora).
+    - PROPOSTA sem resposta há 30 min → devolvida à rede (a cada minuto).
+    - Evento ATIVO com dataHoraFim no passado → CONCLUIDO (a cada 30 min).
+    - Conta criada há 7+ dias sem verificar e-mail → removida (diariamente 03:00).
+    Consequência: listas podem mudar entre um refresh e outro; sempre atualizar.
+R11 NOTA MATCH (informacional): bayesiana com prior 4,0:
+    notaAjustada = (somaNotas + 4,0 × 5) / (quantidade + 5);
+    notaMatch = round(100 × (0,6 × (notaAjustada − 1)/4 + 0,4 × (1 − min(dist,50)/50)));
+    sem coordenadas do prestador → null. Ordenações: painel do prestador por
+    distância asc (+nome do entusiasta); ranking por notaMatch desc, notaAjustada
+    desc, distância asc, nome asc.
+R12 CONCORRÊNCIA: eventos e inscrições usam @Version → edições simultâneas dão
+    409 com a mensagem padrão de "atualize a tela".
+R13 ERROS DE VALIDAÇÃO: requisições JSON inválidas devolvem um MAPA
+    {campo: mensagem} (400); regras de negócio devolvem texto puro (422).
+    O frontend deve exibir a mensagem do backend (pt-BR) sempre que possível.
+R14 SEMPRE enviar Content-Type: application/json nos corpos JSON e multipart/
+    form-data nas rotas de upload (415 caso contrário).
+
+================================================================================
+6. CATÁLOGO DOS ENUMS
+================================================================================
+TipoUsuario: ENTUSIASTA, COLECIONADOR, ORGANIZADOR_EVENTO, PRESTADOR_SERVICO
+TipoPrestadorServico: MECANICO, GUINCHO
+TipoServico (do chamado): MECANICO, GUINCHO
+StatusServico: SOLICITADO, PROPOSTA, PENDENTE, CHEGOU, FINALIZADO
+StatusEvento: ATIVO, ESPERA, INATIVO, CANCELADO, CONCLUIDO
+StatusInscricao: CONFIRMADA, CANCELADA
+ServicosOfertados: TROCA_DE_OLEO, AJUSTE_DE_CARBURADOR, TROCA_CABOS_VELA,
+                    TROCA_FILTRO_AR, FREIOS, SUSPENSAO
+
+ENUMS DO CARRO:
+TipoCarroceria: HATCH, SEDA, SUV, PICAPE, CUPE, PERUA, CONVERSIVEL, MINIVAN, VAN
+TipoMotor: LINHA, V, BOXER, WANKEL, W, RADIAL, ELETRICO
+TipoInjecao: CARBURADO, ELETRONICA, PROGRAMAVEL
+TipoAlimentacao: ASPIRADO, TURBO, SUPERCHARGER, PROCHARGER
+TipoCombustivel: GASOLINA, ETANOL, DIESEL, FLEX, GNV, ELETRICO
+TipoCambio: MANUAL, AUTOMATICO
+TipoTracao: TRASEIRA, DIANTEIRA, INTEGRAL, QUATRO_X_QUATRO, QUATRO_X_DOIS
+TipoSuspensao: FIXA, ROSCA, AR
+TipoFreio: DISCO, TAMBOR
+TipoDirecao: MECANICA, HIDRAULICA, ELETRICA
+TipoRoda: FERRO, LIGA_LEVE, CARBONO
+TipoMaterialRevestimentoInterno: TECIDO, COURO_NATURAL, COURO_SINTETICO,
+                                  ALCANTARA, VELUDO, PLASTICO_INJETADO,
+                                  FIBRA_DE_CARBONO
+
+================================================================================
+7. AVISOS E LACUNAS DE CONTRATO (LEIA ANTES DE GERAR O FRONTEND)
+================================================================================
+1. LOGIN DEVOLVE TEXTO, NÃO JSON: o UUID do usuário (header user-id de todas as
+   próximas chamadas) precisa ser extraído da mensagem de texto do login.
+2. NÃO EXISTE endpoint GET de perfil (nenhum ator): telas de edição de perfil
+   não conseguem pré-carregar nome/telefone/foto do backend. (O DTO
+   PerfilUsuarioDTO existe no código mas não é usado por nenhum controller.)
+3. DETALHE DO CARRO é pobre: GET /carros/{id} devolve SÓ idCarro, marca,
+   modelo, placa e nomeProprietario — as 26 demais características e as fotos
+   NÃO vêm. Uma tela de edição de carro não tem como pré-preencher o formulário
+   com os dados atuais vindos do backend.
+4. EVENTOS NÃO DEVOLVEM FOTOS: EventoRespostaDTO não inclui urlFotoEvento;
+   o catálogo também não. (As fotos são gravadas, mas nenhuma resposta as expõe.)
+5. CORS NÃO LISTA PATCH: métodos permitidos são GET, POST, PUT, DELETE, OPTIONS.
+   PATCH a partir de navegador pode falhar no preflight.
+6. CATÁLOGO — DETALHE SEM FILTRO DE STATUS: GET /eventos/{id} devolve o evento
+   mesmo que não esteja ATIVO (só o feed filtra ATIVO).
+7. INSCRIÇÕES NÃO SÃO PAGINADAS: GET /entusiastas/inscricoes devolve a lista
+   completa.
+8. CAMPO urlFotoCarro (CarroRegistroDTO): exigido pela validação (@NotNull) mas
+   ignorado no mapeamento; fotos do carro entram SÓ pelo part "arquivos" no POST.
+   O PATCH aceita "fotosCarro" como lista de URLs (substitui a lista, SEM
+   revalidar o limite de 2); o PUT não altera fotos.
+9. PUT/PATCH DE CARRO E EVENTO NÃO ACEITAM FOTOS (não são multipart): só o POST
+   cria/sobe fotos. No PATCH do carro, "fotosCarro" é lista de URLs; no PATCH do
+   evento, "urlFotoEvento" é lista de URLs.
+10. ERRO DE FORMATO DE ARQUIVO CHEGA COMO 500: em TODAS as rotas de upload
+    (foto-perfil, fotos de carro/evento, foto inicial/final de serviço), arquivo
+    com extensão inválida ou nome malicioso vira RuntimeException → HTTP 500 com
+    a mensagem no corpo ("Erro ao salvar imagem: Formato de arquivo inválido...",
+    "Tentativa bloqueada" etc.). O frontend deve pré-validar jpg/jpeg/png ≤ 15MB
+    e exibir a mensagem contida no corpo do 500. (Só a foto de perfil de usuário
+    inexistente devolve 404; o tamanho > 15MB devolve 413 em qualquer rota.)
+11. COLECIONADOR ≠ TIPO DE CADASTRO: não existe cadastro "de colecionador"; o
+    título nasce com o 1º carro e morre com o último (a UI deve lidar com o
+    usuário "voltando" a entusiasta).
+12. SEM JWT (Sprint 6 pendente): não há token, refresh, Authorization, nem
+    expiração de sessão no cliente — apenas o header user-id.
+13. O ID USADO COMO user-id É O MESMO para entusiasta→colecionador (o id não
+    muda na virada de título) e para a hierarquia de prestador.
+14. LISTAS COM CORTE EM MEMÓRIA (painel /disponiveis, ranking, painel
+    consolidado do colecionador): a paginação é aplicada pelo backend sobre a
+    lista já ordenada — o contrato do envelope é o mesmo.
+15. Em PATCH de perfil, campos vazios/nulos são ignorados; para limpar um campo
+    não há suporte (os perfis só têm nome/telefone/(placa|serviços), sem opção
+    de limpar).
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================
