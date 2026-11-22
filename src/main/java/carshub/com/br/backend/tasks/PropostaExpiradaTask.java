@@ -28,10 +28,11 @@ public class PropostaExpiradaTask {
     private int minutosExpiracaoProposta;
 
     /**
-     * Roda a cada minuto (o prazo e de 30, entao o desvio maximo e de 1 minuto).
+     * REGRA TRANSVERSAL R9: roda a cada 5 minutos (o prazo e de 30, entao o
+     * desvio maximo e de 5 minutos).
      * Formato do cron: segundo minuto hora dia-do-mes mes dia-da-semana
      */
-    @Scheduled(cron = "0 * * * * *")
+    @Scheduled(cron = "0 */5 * * * *")
     public void liberarPropostasVencidas() {
         int propostasMecanicas = servicoMecanico.liberarPropostasExpiradas(minutosExpiracaoProposta);
         int propostasDeGuincho = servicoGuincho.liberarPropostasExpiradas(minutosExpiracaoProposta);

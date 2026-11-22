@@ -26,6 +26,7 @@ import carshub.com.br.backend.repositories.EntusiastaRepository;
 import carshub.com.br.backend.repositories.GuinchoRepository;
 import carshub.com.br.backend.repositories.servicos.ServicoGuinchoRepository;
 import carshub.com.br.backend.services.file.FileStorageService;
+import carshub.com.br.backend.services.seguranca.ServicoAuditoria;
 import carshub.com.br.backend.services.geocodificacao.GeocodificacaoService;
 import carshub.com.br.backend.utils.DistanciaGeografica;
 import lombok.RequiredArgsConstructor;
@@ -93,6 +94,7 @@ public class ServicoGuinchoService {
     private final GeocodificacaoService servicoGeocodificacao;
     private final FileStorageService servicoArmazenamentoArquivo;
     private final ControleCooldown controleCooldown;
+    private final ServicoAuditoria servicoAuditoria;
     private static final int limitePropostasPorServico = 10;
 
     // ==================================================================
@@ -119,6 +121,11 @@ public class ServicoGuinchoService {
                 dados.latitude(), dados.longitude(), dados.endereco(),
                 colecionador.getLatitude(), colecionador.getLongitude(),
                 "Informe a localização da ocorrência (latitude e longitude do GPS ou o endereço) — ou atualize a localização do seu perfil.");
+
+        // F14: sem GPS, a localizacao vem do ENDERECO digitado (geocodificado)
+        // e as coordenadas resultantes ATUALIZAM o perfil do colecionador.
+        atualizarPerfilSeLocalizacaoVeioDoEndereco(
+                colecionador, dados.latitude(), dados.longitude(), dados.endereco(), localizacao);
 
         ServicoGuincho servico = new ServicoGuincho();
         servico.setEntusiasta(colecionador);
@@ -187,6 +194,9 @@ public class ServicoGuinchoService {
 
         liberarPropostasExcedentes(servico.getGuincho());
 
+        // SPRINT 6 (11.9): acao sensivel registrada na trilha de auditoria.
+        servicoAuditoria.registrar("PROPOSTA_ACEITA", idServico.toString(), null, idEntusiasta, true);
+
         return mapearParaResposta(buscarServicoPorId(idServico));
     }
 
@@ -224,6 +234,10 @@ public class ServicoGuinchoService {
             validarTempoMinimoParaCancelar(servico.getDataHoraPendente());
         }
 
+        // SPRINT 6 (11.9): acao sensivel registrada na trilha de auditoria.
+        servicoAuditoria.registrar("SERVICO_CANCELADO", idServico.toString(),
+                "status=" + servico.getStatus(), idEntusiasta, true);
+
         repositorioServicoGuincho.delete(servico);
     }
 
@@ -246,7 +260,7 @@ public class ServicoGuinchoService {
                     "A foto inicial já foi enviada e não pode ser substituída.");
         }
 
-        servico.setUrlFotoInicial(salvarFoto(arquivo, "a foto inicial do veículo"));
+        servico.setUrlFotoInicial(salvarFoto(arquivo, "a foto inicial do veículo", "colecionador", idEntusiasta));
         repositorioServicoGuincho.save(servico);
 
         return mapearParaResposta(buscarServicoPorId(idServico));
@@ -306,7 +320,7 @@ public class ServicoGuinchoService {
             throw new RegraDeNegocioException("Você já enviou a foto final deste serviço.");
         }
 
-        servico.setUrlFotoFinalEntusiasta(salvarFoto(arquivo, "a foto final do serviço"));
+        servico.setUrlFotoFinalEntusiasta(salvarFoto(arquivo, "a foto final do serviço", "colecionador", idEntusiasta));
         repositorioServicoGuincho.save(servico);
 
         return mapearParaResposta(buscarServicoPorId(idServico));
@@ -324,7 +338,7 @@ public class ServicoGuinchoService {
             throw new RegraDeNegocioException("Você já enviou a foto final deste serviço.");
         }
 
-        servico.setUrlFotoFinalGuincho(salvarFoto(arquivo, "a foto final do serviço"));
+        servico.setUrlFotoFinalGuincho(salvarFoto(arquivo, "a foto final do serviço", "guincho", idGuincho));
         repositorioServicoGuincho.save(servico);
 
         return mapearParaResposta(buscarServicoPorId(idServico));
@@ -467,8 +481,10 @@ public class ServicoGuinchoService {
     public Page<ServicoRespostaDTO> listarMinhaFilaDeTrabalho(UUID idGuincho, int pagina, int tamanho) {
         buscarEValidarGuincho(idGuincho);
 
+        // F37: ordenada por prioridade de status no SQL (PENDENTE -> CHEGOU ->
+        // PROPOSTA -> FINALIZADO) preservando a paginacao nativa.
         Page<ServicoGuincho> paginaDeServicos = repositorioServicoGuincho
-                .findAllByGuincho_IdOrderByDataHoraSolicitacaoDesc(
+                .listarFilaDeTrabalhoPorPrioridade(
                         idGuincho, PaginaRespostaDTO.pageRequest(pagina, tamanho));
 
         Map<UUID, Long> ativosPorGuincho = Map.of(
@@ -632,6 +648,14 @@ public class ServicoGuinchoService {
         if (linhasAfetadas == 1) {
             ServicoGuincho finalizado = buscarServicoPorId(idServico);
             atualizarReputacaoDoGuincho(finalizado.getGuincho(), finalizado.getNotaAvaliacaoEntusiasta());
+            // Item 2: o prestador avaliou o colecionador — o agregado do
+            // entusiasta e atualizado na MESMA transacao de conclusao.
+            atualizarReputacaoDoEntusiasta(finalizado.getEntusiasta(), finalizado.getNotaAvaliacaoGuincho());
+
+            // SPRINT 6 (11.9): acao sensivel registrada na trilha de auditoria.
+            servicoAuditoria.registrar("SERVICO_CONCLUIDO", idServico.toString(),
+                    "guincho=" + (finalizado.getGuincho() == null ? null : finalizado.getGuincho().getId()),
+                    finalizado.getEntusiasta() == null ? null : finalizado.getEntusiasta().getId(), true);
         }
 
         return mapearParaResposta(buscarServicoPorId(idServico));
@@ -654,6 +678,24 @@ public class ServicoGuinchoService {
         guincho.setNotaMediaPrestador((mediaAtual * quantidadeAtual + nota) / (quantidadeAtual + 1.0));
         guincho.setQuantidadeAvaliacoes(quantidadeAtual + 1);
         repositorioGuincho.save(guincho);
+    }
+
+    /**
+     * Item 2: agregado de reputacao do ENTUSIASTA (colecionador) — media +
+     * quantidade das notas dadas pelos PRESTADORES, atualizado na conclusao do
+     * servico com o mesmo padrao do notaMediaPrestador dos prestadores.
+     */
+    private void atualizarReputacaoDoEntusiasta(Entusiasta entusiasta, Integer nota) {
+        if (entusiasta == null || nota == null) {
+            return;
+        }
+
+        double mediaAtual = entusiasta.getNotaMediaEntusiasta() == null ? 0.0 : entusiasta.getNotaMediaEntusiasta();
+        long quantidadeAtual = entusiasta.getQuantidadeAvaliacoes() == null ? 0L : entusiasta.getQuantidadeAvaliacoes();
+
+        entusiasta.setNotaMediaEntusiasta((mediaAtual * quantidadeAtual + nota) / (quantidadeAtual + 1.0));
+        entusiasta.setQuantidadeAvaliacoes(quantidadeAtual + 1);
+        repositorioEntusiasta.save(entusiasta);
     }
 
     // ==================================================================
@@ -784,6 +826,26 @@ public class ServicoGuinchoService {
     }
 
     /**
+     * F14: quando a localizacao do chamado NAO veio do GPS do aparelho e sim do
+     * ENDERECO digitado pelo colecionador, as coordenadas geocodificadas passam
+     * a ser as do perfil dele (economiza a proxima solicitacao). Com GPS na
+     * requisicao nada muda: as coordenadas do GPS NAO sobrescrevem o perfil.
+     */
+    private void atualizarPerfilSeLocalizacaoVeioDoEndereco(Entusiasta entusiasta,
+                                                            Double latitudeInformada, Double longitudeInformada,
+                                                            String enderecoInformado,
+                                                            LocalizacaoGeocodificadaDTO localizacao) {
+        boolean veioDoGps = latitudeInformada != null && longitudeInformada != null;
+        boolean veioDoEndereco = enderecoInformado != null && !enderecoInformado.isBlank();
+
+        if (!veioDoGps && veioDoEndereco) {
+            entusiasta.setLatitude(localizacao.latitude());
+            entusiasta.setLongitude(localizacao.longitude());
+            repositorioEntusiasta.save(entusiasta);
+        }
+    }
+
+    /**
      * O endereco legivel e o estruturado sao preenchidos aqui. Quando a localizacao
      * veio do GPS, tentamos a geocodificacao reversa (best-effort): se falhar, o
      * chamado continua valido com EnderecoOcorrenciaDTO.vazio().
@@ -839,12 +901,12 @@ public class ServicoGuinchoService {
     // ARQUIVOS
     // ==================================================================
 
-    private String salvarFoto(MultipartFile arquivo, String descricao) {
+    private String salvarFoto(MultipartFile arquivo, String descricao, String tipoUsuario, UUID idUsuario) {
         if (arquivo == null || arquivo.isEmpty()) {
             throw new IllegalArgumentException("Envie o arquivo da " + descricao + ".");
         }
 
-        return servicoArmazenamentoArquivo.salvarArquivo(arquivo);
+        return servicoArmazenamentoArquivo.salvarArquivo(arquivo, tipoUsuario, idUsuario);
     }
 
     // ==================================================================

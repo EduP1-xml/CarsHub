@@ -1,5 +1,9 @@
 package carshub.com.br.backend.controllers;
 
+import carshub.com.br.backend.config.UsuarioAutenticado;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoPatchDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoPutDTO;
@@ -20,6 +24,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/carshub/organizadores/eventos")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('ORGANIZADOR_EVENTO')")
 public class EventoController {
 
     private final EventoService servicoEvento;
@@ -28,7 +33,7 @@ public class EventoController {
     public ResponseEntity<EventoRespostaDTO> criarEvento(
             @RequestPart("dados") @Valid EventoRegistroDTO dados,
             @RequestPart(value = "arquivos", required = false) List<MultipartFile> arquivos,
-            @RequestHeader("user-id") UUID idOrganizador) {
+            @UsuarioAutenticado UUID idOrganizador) {
 
         EventoRespostaDTO eventoSalvo = servicoEvento.criarEvento(dados, arquivos, idOrganizador);
         return ResponseEntity.status(HttpStatus.CREATED).body(eventoSalvo);
@@ -36,7 +41,7 @@ public class EventoController {
 
     @GetMapping
     public ResponseEntity<PaginaRespostaDTO<EventoRespostaDTO>> listarMeusEventos(
-            @RequestHeader("user-id") UUID idOrganizador,
+            @UsuarioAutenticado UUID idOrganizador,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
         return ResponseEntity.ok(PaginaRespostaDTO.de(
@@ -46,33 +51,38 @@ public class EventoController {
     @GetMapping("/{idEvento}")
     public ResponseEntity<EventoRespostaDTO> buscarEvento(
             @PathVariable UUID idEvento,
-            @RequestHeader("user-id") UUID idOrganizador) {
+            @UsuarioAutenticado UUID idOrganizador) {
         EventoRespostaDTO evento = servicoEvento.buscarMeuEventoPorId(idEvento, idOrganizador);
         return ResponseEntity.ok(evento);
     }
 
-    @PutMapping("/{idEvento}")
+    // AVISO 7.9: PUT multipart como o POST — `dados` + `arquivos` opcionais.
+    @PutMapping(value = "/{idEvento}", consumes = {"multipart/form-data"})
     public ResponseEntity<EventoRespostaDTO> substituirEvento(
             @PathVariable UUID idEvento,
-            @RequestHeader("user-id") UUID idOrganizador,
-            @Valid @RequestBody EventoPutDTO dados) {
-        EventoRespostaDTO eventoAtualizado = servicoEvento.substituirEvento(idEvento, dados, idOrganizador);
+            @UsuarioAutenticado UUID idOrganizador,
+            @RequestPart("dados") @Valid EventoPutDTO dados,
+            @RequestPart(value = "arquivos", required = false) List<MultipartFile> arquivos) {
+        EventoRespostaDTO eventoAtualizado = servicoEvento.substituirEvento(idEvento, dados, arquivos, idOrganizador);
         return ResponseEntity.ok(eventoAtualizado);
     }
 
-    @PatchMapping("/{idEvento}")
+    // AVISO 7.9: PATCH multipart (fotos opcionais). F31: @Valid ativa o Bean
+    // Validation adicionado ao EventoPatchDTO.
+    @PatchMapping(value = "/{idEvento}", consumes = {"multipart/form-data"})
     public ResponseEntity<EventoRespostaDTO> atualizarEventoParcial(
             @PathVariable UUID idEvento,
-            @RequestHeader("user-id") UUID idOrganizador,
-            @RequestBody EventoPatchDTO dados) {
-        EventoRespostaDTO eventoAtualizado = servicoEvento.atualizarEventoCondicional(idEvento, dados, idOrganizador);
+            @UsuarioAutenticado UUID idOrganizador,
+            @RequestPart("dados") @Valid EventoPatchDTO dados,
+            @RequestPart(value = "arquivos", required = false) List<MultipartFile> arquivos) {
+        EventoRespostaDTO eventoAtualizado = servicoEvento.atualizarEventoCondicional(idEvento, dados, arquivos, idOrganizador);
         return ResponseEntity.ok(eventoAtualizado);
     }
 
     @PatchMapping("/{idEvento}/status")
     public ResponseEntity<EventoRespostaDTO> alterarStatus(
             @PathVariable UUID idEvento,
-            @RequestHeader("user-id") UUID idOrganizador,
+            @UsuarioAutenticado UUID idOrganizador,
             @RequestParam StatusEvento novoStatus) {
         EventoRespostaDTO eventoAtualizado = servicoEvento.alterarStatusEvento(idEvento, novoStatus, idOrganizador);
         return ResponseEntity.ok(eventoAtualizado);
@@ -81,7 +91,7 @@ public class EventoController {
     @DeleteMapping("/{idEvento}")
     public ResponseEntity<Void> excluirEvento(
             @PathVariable UUID idEvento,
-            @RequestHeader("user-id") UUID idOrganizador) {
+            @UsuarioAutenticado UUID idOrganizador) {
         servicoEvento.excluirEvento(idEvento, idOrganizador);
         return ResponseEntity.noContent().build();
     }

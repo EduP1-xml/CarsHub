@@ -301,7 +301,14 @@ public class CadastroService implements UserDetailsService {
 
     private Usuario instanciarSubtipo(CadastroDTO dados) {
         return switch (dados.tipoUsuario()) {
-            case ENTUSIASTA, COLECIONADOR -> new Entusiasta();
+            // AJUSTE TIPOS DE USUARIO (item 3): COLECIONADOR nao pode ser
+            // selecionado no cadastro — o perfil nasce ENTUSIASTA e vira
+            // COLECIONADOR automaticamente ao registrar o primeiro carro.
+            case ENTUSIASTA -> new Entusiasta();
+
+            case COLECIONADOR -> throw new RegraDeNegocioException(
+                    "O tipo de usuário Colecionador não pode ser selecionado no cadastro. "
+                            + "Cadastre-se como Entusiasta e registre um carro na garagem para virar Colecionador.");
 
             case ORGANIZADOR_EVENTO -> new OrganizadorEvento();
 

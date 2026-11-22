@@ -50,13 +50,27 @@ public class CatalogoEventoService {
                 ? List.of()
                 : inscricaoRepository.buscarIdsDeEventosInscritos(idEntusiastaLogado, idsDosEventos, StatusInscricao.CONFIRMADA));
 
-        return paginaEventos.map(projecao -> montarDTO(projecao, vagasOcupadasPorEvento, eventosInscritos));
+        // AVISO 7.4: as fotos do card vem em UMA consulta por pagina (o
+        // urlFotoEvento e colecao lazy e nao entra na projecao de escalares).
+        Map<UUID, List<String>> fotosPorEvento = new HashMap<>();
+        for (Object[] linha : eventoRepository.buscarFotosDosEventos(idsDosEventos)) {
+            fotosPorEvento.computeIfAbsent((UUID) linha[0], id -> new ArrayList<>())
+                    .add((String) linha[1]);
+        }
+
+        return paginaEventos.map(projecao -> montarDTO(projecao, vagasOcupadasPorEvento, eventosInscritos, fotosPorEvento));
     }
 
     @Transactional(readOnly = true)
     public CatalogoEventoResponseDTO buscarDetalhesEvento(UUID idEvento, UUID idEntusiastaLogado) {
         Evento evento = eventoRepository.findById(idEvento)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado."));
+
+        // AVISO 7.6: o catalogo publico so enxerga eventos ATIVOS; eventos
+        // CONCLUIDOS/CANCELADOS sao tratados como inexistentes (404).
+        if (evento.getStatus() != StatusEvento.ATIVO) {
+            throw new RecursoNaoEncontradoException("Evento não encontrado.");
+        }
 
         long vagasOcupadas = inscricaoRepository.countByEvento_IdAndStatus(evento.getId(), StatusInscricao.CONFIRMADA);
         int vagasDisponiveis = Math.max(0, evento.getLimiteParticipantes() - (int) vagasOcupadas);
@@ -68,7 +82,7 @@ public class CatalogoEventoService {
     }
 
     private CatalogoEventoResponseDTO montarDTO(CatalogoEventoProjecaoDTO projecao, Map<UUID, Long> vagasOcupadasPorEvento,
-                                                Set<UUID> eventosInscritos) {
+                                                Set<UUID> eventosInscritos, Map<UUID, List<String>> fotosPorEvento) {
         long vagasOcupadas = vagasOcupadasPorEvento.getOrDefault(projecao.idEvento(), 0L);
         int vagasDisponiveis = Math.max(0, projecao.limiteParticipantes() - (int) vagasOcupadas);
 
@@ -80,13 +94,18 @@ public class CatalogoEventoService {
                 projecao.rua(),
                 projecao.numero(),
                 projecao.bairro(),
+                projecao.cidade(),
+                projecao.uf(),
+                projecao.cep(),
                 projecao.latitude(),
                 projecao.longitude(),
                 projecao.nomeOrganizador(),
+                projecao.emailOrganizador(),
                 vagasDisponiveis,
                 eventosInscritos.contains(projecao.idEvento()),
                 projecao.dataHoraInicio(),
-                projecao.dataHoraFim()
+                projecao.dataHoraFim(),
+                fotosPorEvento.getOrDefault(projecao.idEvento(), List.of())
         );
     }
 
@@ -99,13 +118,18 @@ public class CatalogoEventoService {
                 evento.getRua(),
                 evento.getNumero(),
                 evento.getBairro(),
+                evento.getCidade(),
+                evento.getUf(),
+                evento.getCep(),
                 evento.getLatitude(),
                 evento.getLongitude(),
                 evento.getOrganizadorEvento().getNome(),
+                evento.getOrganizadorEvento().getLogin(),
                 vagasDisponiveis,
                 isInscrito,
                 evento.getDataHoraInicio(),
-                evento.getDataHoraFim()
+                evento.getDataHoraFim(),
+                evento.getUrlFotoEvento() != null ? List.copyOf(evento.getUrlFotoEvento()) : List.of()
         );
     }
 }

@@ -93,8 +93,8 @@ public class Carro {
 
     @NotNull
     @Enumerated(EnumType.STRING)
-    @Column(name = "suspencao_Carro", nullable = false)
-    private TipoSuspensao suspencao;
+    @Column(name = "suspensao_Carro", nullable = false)
+    private TipoSuspensao suspensao;
 
     @NotNull
     @Enumerated(EnumType.STRING)

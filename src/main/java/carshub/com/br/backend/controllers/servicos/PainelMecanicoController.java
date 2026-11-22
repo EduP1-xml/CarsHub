@@ -1,5 +1,9 @@
 package carshub.com.br.backend.controllers.servicos;
 
+import carshub.com.br.backend.config.UsuarioAutenticado;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.servicos.AvaliacaoServicoDTO;
 import carshub.com.br.backend.models.dtos.servicos.PropostaServicoDTO;
@@ -24,13 +28,14 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/carshub/mecanicos/servicos")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('MECANICO')")
 public class PainelMecanicoController {
 
     private final ServicoMecanicoService servicoMecanico;
 
     @GetMapping("/disponiveis")
     public ResponseEntity<PaginaRespostaDTO<ServicoDisponivelDTO>> listarDisponiveis(
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @RequestParam(name = "raioKm", required = false) Double raioKm,
             @RequestParam(name = "latitude", required = false) Double latitude,
             @RequestParam(name = "longitude", required = false) Double longitude,
@@ -46,7 +51,7 @@ public class PainelMecanicoController {
 
     @GetMapping
     public ResponseEntity<PaginaRespostaDTO<ServicoRespostaDTO>> listarMinhaFilaDeTrabalho(
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 
@@ -57,7 +62,7 @@ public class PainelMecanicoController {
     @GetMapping("/{idServico}")
     public ResponseEntity<ServicoRespostaDTO> buscarServico(
             @PathVariable UUID idServico,
-            @RequestHeader("user-id") UUID id) {
+            @UsuarioAutenticado UUID id) {
 
         return ResponseEntity.ok(servicoMecanico.buscarServico(idServico, id));
     }
@@ -65,7 +70,7 @@ public class PainelMecanicoController {
     @PostMapping("/{idServico}/proposta")
     public ResponseEntity<ServicoRespostaDTO> enviarProposta(
             @PathVariable UUID idServico,
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @Valid @RequestBody PropostaServicoDTO dados) {
 
         return ResponseEntity.ok(servicoMecanico.enviarProposta(idServico, id, dados));
@@ -74,7 +79,7 @@ public class PainelMecanicoController {
     @PatchMapping("/{idServico}/confirmar-chegada")
     public ResponseEntity<ServicoRespostaDTO> confirmarChegada(
             @PathVariable UUID idServico,
-            @RequestHeader("user-id") UUID id) {
+            @UsuarioAutenticado UUID id) {
 
         return ResponseEntity.ok(servicoMecanico.confirmarChegadaPeloMecanico(idServico, id));
     }
@@ -82,7 +87,7 @@ public class PainelMecanicoController {
     @PostMapping("/{idServico}/foto-final")
     public ResponseEntity<ServicoRespostaDTO> enviarFotoFinal(
             @PathVariable UUID idServico,
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @RequestParam("arquivo") MultipartFile arquivo) {
 
         return ResponseEntity.ok(servicoMecanico.enviarFotoFinalPeloMecanico(idServico, id, arquivo));
@@ -91,7 +96,7 @@ public class PainelMecanicoController {
     @PostMapping("/{idServico}/avaliacao")
     public ResponseEntity<ServicoRespostaDTO> avaliarColecionador(
             @PathVariable UUID idServico,
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @Valid @RequestBody AvaliacaoServicoDTO dados) {
 
         return ResponseEntity.ok(servicoMecanico.avaliarColecionador(idServico, id, dados));
@@ -100,7 +105,7 @@ public class PainelMecanicoController {
     @PatchMapping("/{idServico}/confirmar-conclusao")
     public ResponseEntity<ServicoRespostaDTO> confirmarConclusao(
             @PathVariable UUID idServico,
-            @RequestHeader("user-id") UUID id) {
+            @UsuarioAutenticado UUID id) {
 
         return ResponseEntity.ok(servicoMecanico.confirmarConclusaoPeloMecanico(idServico, id));
     }

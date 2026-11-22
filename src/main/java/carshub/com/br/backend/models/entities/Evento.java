@@ -6,6 +6,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -55,8 +56,8 @@ public class Evento {
     private String rua;
 
     @NotBlank(message = "O número é obrigatório")
-    @Size(max = 10, message = "O número não pode exceder 10 caracteres")
-    @Column(name = "numero_Evento", length = 10, nullable = false)
+    @Size(max = 5, message = "O número não pode exceder 5 caracteres")
+    @Column(name = "numero_Evento", length = 5, nullable = false)
     private String numero;
 
     @Size(max = 50, message = "O complemento não pode exceder 50 caracteres")
@@ -67,6 +68,24 @@ public class Evento {
     @Size(max = 50, message = "O bairro não pode exceder 50 caracteres")
     @Column(name = "bairro_Evento", length = 50, nullable = false)
     private String bairro;
+
+    // F29: cidade, UF e CEP passam a compor o endereco do evento e sao usados
+    // na geocodificacao e nos calculos de proximidade.
+
+    @NotBlank(message = "A cidade é obrigatória")
+    @Size(max = 50, message = "A cidade não pode exceder 50 caracteres")
+    @Column(name = "cidade_Evento", length = 50, nullable = false)
+    private String cidade;
+
+    @NotBlank(message = "A UF é obrigatória")
+    @Size(min = 2, max = 2, message = "A UF deve conter exatamente 2 caracteres")
+    @Column(name = "uf_Evento", length = 2, nullable = false)
+    private String uf;
+
+    @NotBlank(message = "O CEP é obrigatório")
+    @Pattern(regexp = "\\d{8}", message = "O CEP deve conter exatamente 8 dígitos")
+    @Column(name = "cep_Evento", length = 8, nullable = false)
+    private String cep;
 
     @NotNull(message = "A data e hora de início são obrigatórias")
     @Column(name = "dataHoraInicio_Evento", nullable = false)

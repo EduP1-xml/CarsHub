@@ -1,5 +1,7 @@
 package carshub.com.br.backend.controllers;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import carshub.com.br.backend.models.dtos.CadastroDTO;
 import carshub.com.br.backend.models.dtos.CadastroIndividualDTO;
 import carshub.com.br.backend.models.dtos.ReenvioCodigoDTO;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/carshub/usuarios/cadastrar")
 @RequiredArgsConstructor
+@PreAuthorize("permitAll()")
 public class CadastroController {
 
     private final CadastroService servicoCadastro;

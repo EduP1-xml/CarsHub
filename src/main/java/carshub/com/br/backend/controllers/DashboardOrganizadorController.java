@@ -1,5 +1,9 @@
 package carshub.com.br.backend.controllers;
 
+import carshub.com.br.backend.config.UsuarioAutenticado;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.dashboards.DashboardMetricasResponseDTO;
 import carshub.com.br.backend.models.dtos.dashboards.HistoricoEventoResponseDTO;
@@ -11,6 +15,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/carshub/organizadores/dashboard")
+@PreAuthorize("hasAuthority('ORGANIZADOR_EVENTO')")
 public class DashboardOrganizadorController {
 
     private final DashboardOrganizadorService dashboardService;
@@ -21,7 +26,7 @@ public class DashboardOrganizadorController {
 
     @GetMapping("/metricas")
     public ResponseEntity<DashboardMetricasResponseDTO> obterMetricas(
-            @RequestHeader("user-id") UUID organizadorId) {
+            @UsuarioAutenticado UUID organizadorId) {
         
         DashboardMetricasResponseDTO metricas = dashboardService.obterMetricasGerais(organizadorId);
         return ResponseEntity.ok(metricas);
@@ -29,7 +34,7 @@ public class DashboardOrganizadorController {
 
     @GetMapping("/historico")
     public ResponseEntity<PaginaRespostaDTO<HistoricoEventoResponseDTO>> obterHistorico(
-            @RequestHeader("user-id") UUID organizadorId,
+            @UsuarioAutenticado UUID organizadorId,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 

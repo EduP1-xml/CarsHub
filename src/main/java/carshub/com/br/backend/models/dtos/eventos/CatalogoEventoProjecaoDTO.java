@@ -6,8 +6,8 @@ import java.util.UUID;
 
 /**
  * AJUSTE 1.1b: projecao de leitura do catalogo — os escalares que o Page&lt;T&gt;
- * traz direto do SQL, antes de o CatalogoEventoService completar vagasDisponiveis
- * e a flag inscrito (que dependem de agregados em outra tabela).
+ * traz direto do SQL, antes de o CatalogoEventoService completar vagasDisponiveis,
+ * a flag inscrito e as FOTOS (que dependem de agregados em outras tabelas).
  * Nao e contrato de API: nunca sai como resposta.
  */
 public record CatalogoEventoProjecaoDTO(
@@ -18,9 +18,13 @@ public record CatalogoEventoProjecaoDTO(
         String rua,
         String numero,
         String bairro,
+        String cidade,
+        String uf,
+        String cep,
         Double latitude,
         Double longitude,
         String nomeOrganizador,
+        String emailOrganizador,
         Integer limiteParticipantes,
         LocalDateTime dataHoraInicio,
         LocalDateTime dataHoraFim

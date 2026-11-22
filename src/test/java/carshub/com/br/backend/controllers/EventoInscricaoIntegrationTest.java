@@ -53,12 +53,13 @@ class EventoInscricaoIntegrationTest extends TesteIntegracaoBase {
         String corpo = """
                 {"nome":"Encontro de Classicos","descricao":"Evento de carros antigos","preco":20.00,
                  "limiteParticipantes":%d,"rua":"Rua A","numero":"1","bairro":"Centro",
+                 "cidade":"Sao Paulo","uf":"SP","cep":"01310100",
                  "dataHoraInicio":"2026-12-01T09:00:00","dataHoraFim":"2026-12-01T18:00:00"}
                 """.formatted(limiteParticipantes).replace("\n", "");
 
-        MvcResult criado = mockMvc.perform(multipart(BASE_EVENTOS)
+        MvcResult criado = mockMvc.perform(multipart(BASE_EVENTOS).with(csrfToken())
                         .file(new MockMultipartFile("dados", "", "application/json", corpo.getBytes()))
-                        .header("user-id", organizador.getId()))
+                        .header("Authorization", tokenDe(organizador)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("ATIVO"))
                 .andReturn();
@@ -97,23 +98,24 @@ class EventoInscricaoIntegrationTest extends TesteIntegracaoBase {
         org.assertj.core.api.Assertions.assertThat(nossoEvento.get("vagasDisponiveis").asInt()).isEqualTo(2);
 
         Entusiasta entusiasta = criarEntusiasta("ins" + sufixo);
-        mockMvc.perform(post(BASE_INSCRICOES)
-                        .header("user-id", entusiasta.getId())
+        // INVENTARIO DE ENDPOINTS (item 2): o idEvento agora vem na rota.
+        mockMvc.perform(post(BASE_INSCRICOES + "/{idEvento}", idEvento).with(csrfToken())
+                        .header("Authorization", tokenDe(entusiasta))
                         .contentType("application/json")
-                        .content("{\"idEvento\":\"%s\"}".formatted(idEvento)))
+                        .content("{}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("CONFIRMADA"));
 
         // Duplicada: 422
-        mockMvc.perform(post(BASE_INSCRICOES)
-                        .header("user-id", entusiasta.getId())
+        mockMvc.perform(post(BASE_INSCRICOES + "/{idEvento}", idEvento).with(csrfToken())
+                        .header("Authorization", tokenDe(entusiasta))
                         .contentType("application/json")
-                        .content("{\"idEvento\":\"%s\"}".formatted(idEvento)))
+                        .content("{}"))
                 .andExpect(status().isUnprocessableEntity());
 
         // Catalogo agora marca inscrito=true
         MvcResult catalogoInscrito = mockMvc.perform(get("/api/carshub/eventos")
-                        .header("user-id", entusiasta.getId()).param("tamanho", "1000"))
+                        .header("Authorization", tokenDe(entusiasta)).param("tamanho", "1000"))
                 .andExpect(status().isOk())
                 .andReturn();
         com.fasterxml.jackson.databind.JsonNode eventoInscrito = encontrarEventoNo(catalogoInscrito, idEvento);
@@ -122,7 +124,7 @@ class EventoInscricaoIntegrationTest extends TesteIntegracaoBase {
 
         // Dashboard do organizador
         mockMvc.perform(get("/api/carshub/organizadores/dashboard/metricas")
-                        .header("user-id", organizador.getId()))
+                        .header("Authorization", tokenDe(organizador)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalParticipantesMobilizados").value(1));
 
@@ -131,7 +133,8 @@ class EventoInscricaoIntegrationTest extends TesteIntegracaoBase {
                         repositorioInscricao.findAll().stream()
                                 .filter(i -> i.getEvento().getId().equals(idEvento))
                                 .findFirst().orElseThrow().getId())
-                        .header("user-id", entusiasta.getId()))
+                        .with(csrfToken())
+                        .header("Authorization", tokenDe(entusiasta)))
                 .andExpect(status().isOk())
                 .andReturn();
         org.assertj.core.api.Assertions.assertThat(cancelamento.getResponse().getContentAsString())
@@ -145,17 +148,17 @@ class EventoInscricaoIntegrationTest extends TesteIntegracaoBase {
         UUID idEvento = criarEvento(1);
 
         Entusiasta primeiro = criarEntusiasta("lot1" + sufixo);
-        mockMvc.perform(post(BASE_INSCRICOES)
-                        .header("user-id", primeiro.getId())
+        mockMvc.perform(post(BASE_INSCRICOES + "/{idEvento}", idEvento).with(csrfToken())
+                        .header("Authorization", tokenDe(primeiro))
                         .contentType("application/json")
-                        .content("{\"idEvento\":\"%s\"}".formatted(idEvento)))
+                        .content("{}"))
                 .andExpect(status().isCreated());
 
         Entusiasta segundo = criarEntusiasta("lot2" + sufixo);
-        mockMvc.perform(post(BASE_INSCRICOES)
-                        .header("user-id", segundo.getId())
+        mockMvc.perform(post(BASE_INSCRICOES + "/{idEvento}", idEvento).with(csrfToken())
+                        .header("Authorization", tokenDe(segundo))
                         .contentType("application/json")
-                        .content("{\"idEvento\":\"%s\"}".formatted(idEvento)))
+                        .content("{}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$").value(containsString("limite")));
     }
@@ -165,13 +168,163 @@ class EventoInscricaoIntegrationTest extends TesteIntegracaoBase {
     void datasInvalidas422() throws Exception {
         String corpo = """
                 {"nome":"Evento Invalido","descricao":"Datas erradas","preco":0.00,"limiteParticipantes":5,
-                 "rua":"Rua A","numero":"1","bairro":"Centro",
+                 "rua":"Rua A","numero":"1","bairro":"Centro","cidade":"Sao Paulo","uf":"SP","cep":"01310100",
                  "dataHoraInicio":"2026-12-02T09:00:00","dataHoraFim":"2026-12-01T18:00:00"}
                 """.replace("\n", "");
 
-        mockMvc.perform(multipart(BASE_EVENTOS)
+        mockMvc.perform(multipart(BASE_EVENTOS).with(csrfToken())
                         .file(new MockMultipartFile("dados", "", "application/json", corpo.getBytes()))
-                        .header("user-id", organizador.getId()))
+                        .header("Authorization", tokenDe(organizador)))
                 .andExpect(status().isUnprocessableEntity());
+    }
+
+    // ==================================================================
+    // AJUSTE 1.3 (pendencia): minhas inscricoes paginadas no SQL
+    // ==================================================================
+
+    @Test
+    @DisplayName("minhas inscricoes sem registros devolvem pagina vazia (default tamanho=5)")
+    void inscricoesPaginaVazia() throws Exception {
+        Entusiasta entusiasta = criarEntusiasta("pgv" + sufixoUnico());
+
+        mockMvc.perform(get(BASE_INSCRICOES).header("Authorization", tokenDe(entusiasta)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conteudo.length()").value(0))
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamanho").value(5))
+                .andExpect(jsonPath("$.totalElementos").value(0))
+                .andExpect(jsonPath("$.totalPaginas").value(0))
+                .andExpect(jsonPath("$.ultima").value(true));
+    }
+
+    @Test
+    @DisplayName("minhas inscricoes paginam com default 5 e borda na segunda pagina")
+    void inscricoesPaginadasDefaultEBorda() throws Exception {
+        Entusiasta entusiasta = criarEntusiasta("pgb" + sufixoUnico());
+
+        // 6 eventos + 6 inscricoes (a pagina 2 deve trazer apenas 1)
+        for (int i = 0; i < 6; i++) {
+            UUID idEvento = criarEvento(50);
+            mockMvc.perform(post(BASE_INSCRICOES + "/{idEvento}", idEvento).with(csrfToken())
+                            .header("Authorization", tokenDe(entusiasta))
+                            .contentType("application/json")
+                            .content("{}"))
+                    .andExpect(status().isCreated());
+        }
+
+        // Default: pagina 0, tamanho 5
+        mockMvc.perform(get(BASE_INSCRICOES).header("Authorization", tokenDe(entusiasta)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conteudo.length()").value(5))
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamanho").value(5))
+                .andExpect(jsonPath("$.totalElementos").value(6))
+                .andExpect(jsonPath("$.totalPaginas").value(2))
+                .andExpect(jsonPath("$.ultima").value(false));
+
+        // Borda: pagina 1 traz o item restante e marca ultima=true
+        mockMvc.perform(get(BASE_INSCRICOES)
+                        .header("Authorization", tokenDe(entusiasta))
+                        .param("pagina", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conteudo.length()").value(1))
+                .andExpect(jsonPath("$.pagina").value(1))
+                .andExpect(jsonPath("$.ultima").value(true));
+
+        // Pagina alem do fim: conteudo vazio (pagina inexistente)
+        mockMvc.perform(get(BASE_INSCRICOES)
+                        .header("Authorization", tokenDe(entusiasta))
+                        .param("pagina", "9"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conteudo.length()").value(0))
+                .andExpect(jsonPath("$.pagina").value(9));
+    }
+
+    // ==================================================================
+    // F31: PUT so regeocodifica quando o endereco muda; PATCH com BeanValidation
+    // ==================================================================
+
+    @Test
+    @DisplayName("PUT com endereco igual NAO chama a geocodificacao (mantem as coordenadas)")
+    void putComEnderecoIgualNaoRegeocodifica() throws Exception {
+        UUID idEvento = criarEvento(10);
+        Mockito.clearInvocations(servicoGeocodificacao);
+
+        String corpo = """
+                {"nome":"Encontro de Classicos","descricao":"Descricao atualizada","preco":25.00,
+                 "limiteParticipantes":10,"rua":"Rua A","numero":"1","bairro":"Centro",
+                 "cidade":"Sao Paulo","uf":"SP","cep":"01310100",
+                 "dataHoraInicio":"2026-12-01T09:00:00","dataHoraFim":"2026-12-01T18:00:00"}
+                """.replace("\n", "");
+
+        mockMvc.perform(multipart(org.springframework.http.HttpMethod.PUT, BASE_EVENTOS + "/{idEvento}", idEvento).with(csrfToken())
+                        .file(new MockMultipartFile("dados", "", "application/json", corpo.getBytes()))
+                        .header("Authorization", tokenDe(organizador)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.descricao").value("Descricao atualizada"))
+                .andExpect(jsonPath("$.latitude").value(-23.5505));
+
+        // Endereco inalterado: nenhuma chamada nova ao Google
+        Mockito.verify(servicoGeocodificacao, Mockito.never()).geocodificarEndereco(anyString());
+    }
+
+    @Test
+    @DisplayName("PUT com endereco diferente regeocodifica")
+    void putComEnderecoDiferenteRegeocodifica() throws Exception {
+        UUID idEvento = criarEvento(10);
+        Mockito.clearInvocations(servicoGeocodificacao);
+
+        String corpo = """
+                {"nome":"Encontro de Classicos","descricao":"Outro lugar","preco":20.00,
+                 "limiteParticipantes":10,"rua":"Rua B","numero":"2","bairro":"Pinheiros",
+                 "cidade":"Sao Paulo","uf":"SP","cep":"05422000",
+                 "dataHoraInicio":"2026-12-01T09:00:00","dataHoraFim":"2026-12-01T18:00:00"}
+                """.replace("\n", "");
+
+        mockMvc.perform(multipart(org.springframework.http.HttpMethod.PUT, BASE_EVENTOS + "/{idEvento}", idEvento).with(csrfToken())
+                        .file(new MockMultipartFile("dados", "", "application/json", corpo.getBytes()))
+                        .header("Authorization", tokenDe(organizador)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rua").value("Rua B"));
+
+        Mockito.verify(servicoGeocodificacao).geocodificarEndereco(anyString());
+    }
+
+    @Test
+    @DisplayName("PATCH valida os campos com BeanValidation (numero com mais de 5 caracteres -> 400)")
+    void patchComNumeroLongo400() throws Exception {
+        UUID idEvento = criarEvento(10);
+
+        mockMvc.perform(multipart(org.springframework.http.HttpMethod.PATCH, BASE_EVENTOS + "/{idEvento}", idEvento).with(csrfToken())
+                        .file(new MockMultipartFile("dados", "", "application/json",
+                                "{\"numero\":\"123456\"}".getBytes()))
+                        .header("Authorization", tokenDe(organizador)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("PATCH valida UF (3 caracteres -> 400)")
+    void patchComUfInvalida400() throws Exception {
+        UUID idEvento = criarEvento(10);
+
+        mockMvc.perform(multipart(org.springframework.http.HttpMethod.PATCH, BASE_EVENTOS + "/{idEvento}", idEvento).with(csrfToken())
+                        .file(new MockMultipartFile("dados", "", "application/json",
+                                "{\"uf\":\"SPP\"}".getBytes()))
+                        .header("Authorization", tokenDe(organizador)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET /eventos/{id} devolve 404 para evento nao-ATIVO (7.6)")
+    void detalheDeEventoNaoAtivo404() throws Exception {
+        UUID idEvento = criarEvento(10);
+
+        mockMvc.perform(patch(BASE_EVENTOS + "/{idEvento}/status", idEvento).with(csrfToken())
+                        .header("Authorization", tokenDe(organizador))
+                        .param("novoStatus", "CANCELADO"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/carshub/eventos/{idEvento}", idEvento))
+                .andExpect(status().isNotFound());
     }
 }

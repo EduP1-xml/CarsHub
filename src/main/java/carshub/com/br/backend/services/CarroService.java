@@ -4,6 +4,7 @@ import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.PlacaJaCadastradaException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
+import carshub.com.br.backend.models.dtos.carros.CarroGaragemProjecaoDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroPatchDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRegistroDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRespostaDTO;
@@ -21,7 +22,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -55,10 +55,15 @@ public class CarroService {
         if (arquivos != null && !arquivos.isEmpty()) {
             for (MultipartFile file : arquivos) {
                 if (file != null && !file.isEmpty()) {
-                    String fileDownloadUri = fileStorageService.salvarArquivo(file);
+                    String fileDownloadUri = fileStorageService.salvarArquivo(file, "colecionador", entusiastaId);
                     todasAsUrls.add(fileDownloadUri);
                 }
             }
+        }
+        // F13: urlFotoCarro deixou de ser obrigatoria — quando nao ha arquivos
+        // multipart, valem as URLs enviadas no JSON (compatibilidade).
+        if (todasAsUrls.isEmpty() && dto.urlFotoCarro() != null) {
+            todasAsUrls.addAll(dto.urlFotoCarro());
         }
         carro.setFotosCarro(todasAsUrls);
         Carro carroSalvo = carroRepository.save(carro);
@@ -68,7 +73,8 @@ public class CarroService {
     /**
      * Garagem paginada NATIVA (Page no SQL). Deixou de carregar a
      * colecao lazy inteira do colecionador. Garagem vazia devolve Page vazio.
-     * AJUSTE 1.1b: projecao de escalares — o SQL devolve o DTO pronto.
+     * AJUSTE 1.1b: projecao de escalares — o SQL devolve o CarroGaragemProjecaoDTO
+     * e o service monta o CarroRespostaDTO (fotos vazias na listagem).
      */
     @Transactional(readOnly = true)
     public Page<CarroRespostaDTO> listarCarrosDoColecionador(UUID entusiastaId, int pagina, int tamanho) {
@@ -80,32 +86,55 @@ public class CarroService {
         }
 
         return carroRepository.projetarGaragemDoColecionador(
-                proprietario.getColecionador().getId(), PaginaRespostaDTO.pageRequest(pagina, tamanho));
+                        proprietario.getColecionador().getId(), PaginaRespostaDTO.pageRequest(pagina, tamanho))
+                .map(CarroService::mapearProjecaoParaResponse);
     }
 
+    // F13: o detalhe devolve TODOS os campos do carro, inclusive as fotos.
     public CarroRespostaDTO buscarCarroPorId(UUID carroId, UUID entusiastaId) {
         Carro carro = verificarPropriedadeDoCarro(carroId, entusiastaId);
         return mapearEntidadeParaResponse(carro, carro.getColecionador().getEntusiasta().getNome());
     }
 
-    // Método PUT: Substituição Completa
+    // Método PUT: Substituição Completa (AVISO 7.9: multipart com fotos opcionais)
     @Transactional
-    public CarroRespostaDTO substituirCarro(UUID carroId, CarroRegistroDTO dto, UUID entusiastaId) {
+    public CarroRespostaDTO substituirCarro(UUID carroId, CarroRegistroDTO dto, List<MultipartFile> arquivos, UUID entusiastaId) {
         Carro carro = verificarPropriedadeDoCarro(carroId, entusiastaId);
         // Verifica se a nova placa não pertence a outro carro
         if (!carro.getPlaca().equals(dto.placa()) && carroRepository.existsByPlaca(dto.placa())) {
             throw new PlacaJaCadastradaException("A nova placa informada já está registrada em outro veículo.");
         }
 
+        if (arquivos != null && arquivos.size() > 2) {
+            throw new IllegalArgumentException("É permitido enviar no máximo 2 fotos por carro.");
+        }
+
         mapearRegistroDtoParaEntidade(carro, dto);
+
+        // Fotos: arquivos multipart substituem todas; sem arquivos, vale a
+        // lista de URLs do JSON; sem os dois, as fotos atuais sao mantidas.
+        if (arquivos != null && !arquivos.isEmpty()) {
+            List<String> urls = new ArrayList<>();
+            for (MultipartFile arquivo : arquivos) {
+                if (arquivo != null && !arquivo.isEmpty()) {
+                    urls.add(fileStorageService.salvarArquivo(arquivo, "colecionador", entusiastaId));
+                }
+            }
+            carro.setFotosCarro(urls);
+        }
+        else if (dto.urlFotoCarro() != null) {
+            carro.setFotosCarro(dto.urlFotoCarro());
+        }
+
         Carro carroAtualizado = carroRepository.save(carro);
 
         return mapearEntidadeParaResponse(carroAtualizado, carroAtualizado.getColecionador().getEntusiasta().getNome());
     }
 
-    // Método PATCH: Atualização Parcial
+    // Método PATCH: Atualização Parcial (AVISO 7.8: fotos trocadas slot a slot)
     @Transactional
-    public CarroRespostaDTO atualizarCarroCondicional(UUID carroId, CarroPatchDTO dto, UUID entusiastaId) {
+    public CarroRespostaDTO atualizarCarroCondicional(UUID carroId, CarroPatchDTO dto,
+                                                      MultipartFile foto1, MultipartFile foto2, UUID entusiastaId) {
         Carro carro = verificarPropriedadeDoCarro(carroId, entusiastaId);
 
         if (dto.placa() != null && !dto.placa().isBlank() && !carro.getPlaca().equals(dto.placa())) {
@@ -128,7 +157,7 @@ public class CarroService {
         if (dto.combustivel() != null) carro.setCombustivel(dto.combustivel());
         if (dto.cambio() != null) carro.setCambio(dto.cambio());
         if (dto.tracao() != null) carro.setTracao(dto.tracao());
-        if (dto.suspencao() != null) carro.setSuspencao(dto.suspencao());
+        if (dto.suspensao() != null) carro.setSuspensao(dto.suspensao());
         if (dto.freio() != null) carro.setFreio(dto.freio());
         if (dto.direcao() != null) carro.setDirecao(dto.direcao());
         if (dto.roda() != null) carro.setRoda(dto.roda());
@@ -140,9 +169,15 @@ public class CarroService {
         if (dto.som() != null) carro.setSom(dto.som());
         if (dto.arCondicionado() != null) carro.setArCondicionado(dto.arCondicionado());
         if (dto.tetoSolar() != null) carro.setTetoSolar(dto.tetoSolar());
-        if (dto.fotosCarro() != null) {
-            carro.setFotosCarro(dto.fotosCarro());
+
+        // AVISO 7.8: fotos trocadas uma a uma (foto1/foto2), validando o limite de 2.
+        List<String> fotos = new ArrayList<>(carro.getFotosCarro() != null ? carro.getFotosCarro() : List.of());
+        aplicarFotoNoSlot(fotos, 1, foto1, entusiastaId);
+        aplicarFotoNoSlot(fotos, 2, foto2, entusiastaId);
+        if (fotos.size() > 2) {
+            throw new IllegalArgumentException("É permitido enviar no máximo 2 fotos por carro.");
         }
+        carro.setFotosCarro(fotos);
 
         Carro carroAtualizado = carroRepository.save(carro);
         return mapearEntidadeParaResponse(carroAtualizado, carroAtualizado.getColecionador().getEntusiasta().getNome());
@@ -173,6 +208,30 @@ public class CarroService {
         return carro;
     }
 
+    /**
+     * AVISO 7.8: substitui a foto do SLOT indicado (1 ou 2). Slots faltantes no
+     * meio sao preenchidos com null (as posicoes importam: foto 1 = indice 0,
+     * foto 2 = indice 1). O limite de 2 e validado pelo chamador.
+     */
+    private void aplicarFotoNoSlot(List<String> fotos, int slot, MultipartFile arquivo, UUID idColecionador) {
+        if (arquivo == null || arquivo.isEmpty()) {
+            return;
+        }
+
+        String uri = fileStorageService.salvarArquivo(arquivo, "colecionador", idColecionador);
+        int indice = slot - 1;
+
+        while (fotos.size() < indice) {
+            fotos.add(null);
+        }
+        if (fotos.size() == indice) {
+            fotos.add(uri);
+        }
+        else {
+            fotos.set(indice, uri);
+        }
+    }
+
     private void mapearRegistroDtoParaEntidade(Carro carro, CarroRegistroDTO dto) {
         carro.setMarca(dto.marca());
         carro.setModelo(dto.modelo());
@@ -187,7 +246,7 @@ public class CarroService {
         carro.setCombustivel(dto.combustivel());
         carro.setCambio(dto.cambio());
         carro.setTracao(dto.tracao());
-        carro.setSuspencao(dto.suspencao());
+        carro.setSuspensao(dto.suspensao());
         carro.setFreio(dto.freio());
         carro.setDirecao(dto.direcao());
         carro.setRoda(dto.roda());
@@ -202,13 +261,70 @@ public class CarroService {
         carro.setTetoSolar(dto.tetoSolar());
     }
 
+    private static CarroRespostaDTO mapearProjecaoParaResponse(CarroGaragemProjecaoDTO projecao) {
+        return new CarroRespostaDTO(
+                projecao.idCarro(),
+                projecao.marca(),
+                projecao.modelo(),
+                projecao.placa(),
+                projecao.nomeProprietario(),
+                projecao.carroceria(),
+                projecao.ano(),
+                projecao.cor(),
+                projecao.quantidadeCilindros(),
+                projecao.motor(),
+                projecao.litragemMotor(),
+                projecao.injecao(),
+                projecao.alimentacao(),
+                projecao.combustivel(),
+                projecao.cambio(),
+                projecao.tracao(),
+                projecao.suspensao(),
+                projecao.freio(),
+                projecao.direcao(),
+                projecao.roda(),
+                projecao.aro(),
+                projecao.numeroPortas(),
+                projecao.numeroAssentos(),
+                projecao.materialRevestimentoInterno(),
+                projecao.vidrosEletricos(),
+                projecao.som(),
+                projecao.arCondicionado(),
+                projecao.tetoSolar(),
+                List.of());
+    }
+
     private CarroRespostaDTO mapearEntidadeParaResponse(Carro carro, String nomeProprietario) {
         return new CarroRespostaDTO(
                 carro.getId(),
                 carro.getMarca(),
                 carro.getModelo(),
                 carro.getPlaca(),
-                nomeProprietario
+                nomeProprietario,
+                carro.getCarroceria(),
+                carro.getAno(),
+                carro.getCor(),
+                carro.getQuantidadeCilindros(),
+                carro.getMotor(),
+                carro.getLitragemMotor(),
+                carro.getInjecao(),
+                carro.getAlimentacao(),
+                carro.getCombustivel(),
+                carro.getCambio(),
+                carro.getTracao(),
+                carro.getSuspensao(),
+                carro.getFreio(),
+                carro.getDirecao(),
+                carro.getRoda(),
+                carro.getAro(),
+                carro.getNumeroPortas(),
+                carro.getNumeroAssentos(),
+                carro.getMaterialRevestimentoInterno(),
+                carro.getVidrosEletricos(),
+                carro.getSom(),
+                carro.getArCondicionado(),
+                carro.getTetoSolar(),
+                carro.getFotosCarro() != null ? List.copyOf(carro.getFotosCarro()) : List.of()
         );
     }
 }

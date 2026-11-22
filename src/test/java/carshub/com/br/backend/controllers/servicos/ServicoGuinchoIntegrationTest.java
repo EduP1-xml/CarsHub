@@ -52,8 +52,8 @@ class ServicoGuinchoIntegrationTest extends TesteIntegracaoBase {
                 {"idCarro":"%s","latitude":%s,"longitude":%s}
                 """.formatted(carro.getId(), LATITUDE_PADRAO, LONGITUDE_PADRAO);
 
-        MvcResult criado = mockMvc.perform(post(BASE_COLECIONADOR)
-                        .header("user-id", colecionador.getId())
+        MvcResult criado = mockMvc.perform(post(BASE_COLECIONADOR).with(csrfToken())
+                        .header("Authorization", tokenDe(colecionador))
                         .contentType("application/json").content(corpo))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("SOLICITADO"))
@@ -64,7 +64,7 @@ class ServicoGuinchoIntegrationTest extends TesteIntegracaoBase {
 
         // Painel do guincho: com notaMatch (ajuste 1.5) e sem lista de servicos
         mockMvc.perform(get(BASE_GUINCHO + "/disponiveis")
-                        .header("user-id", guincho.getId())
+                        .header("Authorization", tokenDe(guincho))
                         .param("latitude", String.valueOf(LATITUDE_PADRAO))
                         .param("longitude", String.valueOf(LONGITUDE_PADRAO)))
                 .andExpect(status().isOk())
@@ -73,68 +73,68 @@ class ServicoGuinchoIntegrationTest extends TesteIntegracaoBase {
                 .andExpect(jsonPath("$.conteudo[0].notaMatch").isNumber())
                 .andExpect(jsonPath("$.conteudo[0].servicosSolicitados").isEmpty());
 
-        mockMvc.perform(post(BASE_GUINCHO + "/{id}/proposta", idServico)
-                        .header("user-id", guincho.getId())
+        mockMvc.perform(post(BASE_GUINCHO + "/{id}/proposta", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(guincho))
                         .contentType("application/json")
                         .content("{\"valorProposto\":500.00,\"latitude\":%s,\"longitude\":%s}"
                                 .formatted(LATITUDE_PADRAO, LONGITUDE_PADRAO)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PROPOSTA"));
 
-        mockMvc.perform(patch(BASE_COLECIONADOR + "/{id}/aceitar-proposta", idServico)
-                        .header("user-id", colecionador.getId()))
+        mockMvc.perform(patch(BASE_COLECIONADOR + "/{id}/aceitar-proposta", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(colecionador)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDENTE"));
 
-        mockMvc.perform(multipart(BASE_COLECIONADOR + "/{id}/foto-inicial", idServico)
+        mockMvc.perform(multipart(BASE_COLECIONADOR + "/{id}/foto-inicial", idServico).with(csrfToken())
                         .file(new MockMultipartFile("arquivo", "foto-inicial.png", "image/png", new byte[]{1, 2}))
-                        .header("user-id", colecionador.getId()))
+                        .header("Authorization", tokenDe(colecionador)))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(patch(BASE_COLECIONADOR + "/{id}/confirmar-chegada", idServico)
-                        .header("user-id", colecionador.getId()))
+        mockMvc.perform(patch(BASE_COLECIONADOR + "/{id}/confirmar-chegada", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(colecionador)))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(patch(BASE_GUINCHO + "/{id}/confirmar-chegada", idServico)
-                        .header("user-id", guincho.getId()))
+        mockMvc.perform(patch(BASE_GUINCHO + "/{id}/confirmar-chegada", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(guincho)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CHEGOU"));
 
-        mockMvc.perform(multipart(BASE_COLECIONADOR + "/{id}/foto-final", idServico)
+        mockMvc.perform(multipart(BASE_COLECIONADOR + "/{id}/foto-final", idServico).with(csrfToken())
                         .file(new MockMultipartFile("arquivo", "ff-e.png", "image/png", new byte[]{3}))
-                        .header("user-id", colecionador.getId()))
+                        .header("Authorization", tokenDe(colecionador)))
                 .andExpect(status().isOk());
-        mockMvc.perform(multipart(BASE_GUINCHO + "/{id}/foto-final", idServico)
+        mockMvc.perform(multipart(BASE_GUINCHO + "/{id}/foto-final", idServico).with(csrfToken())
                         .file(new MockMultipartFile("arquivo", "ff-g.png", "image/png", new byte[]{4}))
-                        .header("user-id", guincho.getId()))
+                        .header("Authorization", tokenDe(guincho)))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post(BASE_COLECIONADOR + "/{id}/avaliacao", idServico)
-                        .header("user-id", colecionador.getId())
+        mockMvc.perform(post(BASE_COLECIONADOR + "/{id}/avaliacao", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(colecionador))
                         .contentType("application/json").content("{\"nota\":5,\"comentario\":\"Rapido\"}"))
                 .andExpect(status().isOk());
-        mockMvc.perform(post(BASE_GUINCHO + "/{id}/avaliacao", idServico)
-                        .header("user-id", guincho.getId())
+        mockMvc.perform(post(BASE_GUINCHO + "/{id}/avaliacao", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(guincho))
                         .contentType("application/json").content("{\"nota\":3,\"comentario\":\"Ok\"}"))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(patch(BASE_COLECIONADOR + "/{id}/confirmar-conclusao", idServico)
-                        .header("user-id", colecionador.getId()))
+        mockMvc.perform(patch(BASE_COLECIONADOR + "/{id}/confirmar-conclusao", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(colecionador)))
                 .andExpect(status().isOk());
-        mockMvc.perform(patch(BASE_GUINCHO + "/{id}/confirmar-conclusao", idServico)
-                        .header("user-id", guincho.getId()))
+        mockMvc.perform(patch(BASE_GUINCHO + "/{id}/confirmar-conclusao", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(guincho)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("FINALIZADO"));
 
         mockMvc.perform(get(BASE_COLECIONADOR + "/{id}", idServico)
-                        .header("user-id", colecionador.getId()))
+                        .header("Authorization", tokenDe(colecionador)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.notaMediaPrestador").value(4.17))
                 .andExpect(jsonPath("$.quantidadeAvaliacoes").value(1));
 
         // Historico do veiculo: guincho sem lista de servicos realizados
         mockMvc.perform(get("/api/carshub/colecionador/carros/{idCarro}/historico-manutencoes", carro.getId())
-                        .header("user-id", colecionador.getId()))
+                        .header("Authorization", tokenDe(colecionador)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.conteudo[0].tipoServico").value("GUINCHO"))
                 .andExpect(jsonPath("$.conteudo[0].servicosRealizados").isEmpty());
@@ -151,12 +151,12 @@ class ServicoGuinchoIntegrationTest extends TesteIntegracaoBase {
                 {"idCarro":"%s","latitude":%s,"longitude":%s}
                 """.formatted(carro.getId(), LATITUDE_PADRAO, LONGITUDE_PADRAO);
 
-        mockMvc.perform(post(BASE_COLECIONADOR)
-                        .header("user-id", colecionador.getId())
+        mockMvc.perform(post(BASE_COLECIONADOR).with(csrfToken())
+                        .header("Authorization", tokenDe(colecionador))
                         .contentType("application/json").content(corpo))
                 .andExpect(status().isCreated());
-        mockMvc.perform(post(BASE_COLECIONADOR)
-                        .header("user-id", colecionador.getId())
+        mockMvc.perform(post(BASE_COLECIONADOR).with(csrfToken())
+                        .header("Authorization", tokenDe(colecionador))
                         .contentType("application/json").content(corpo))
                 .andExpect(status().isConflict());
     }
@@ -179,8 +179,8 @@ class ServicoGuinchoIntegrationTest extends TesteIntegracaoBase {
         // Novo chamado de outro colecionador
         Entusiasta solicitante = criarColecionador(repositorioEntusiasta, emailUnico("gsol" + sufixo), cpfUnico());
         Carro carroSolicitante = criarCarro(repositorioCarro, solicitante.getColecionador(), placaUnico());
-        MvcResult criado = mockMvc.perform(post(BASE_COLECIONADOR)
-                        .header("user-id", solicitante.getId())
+        MvcResult criado = mockMvc.perform(post(BASE_COLECIONADOR).with(csrfToken())
+                        .header("Authorization", tokenDe(solicitante))
                         .contentType("application/json")
                         .content("""
                                 {"idCarro":"%s","latitude":%s,"longitude":%s}
@@ -190,8 +190,8 @@ class ServicoGuinchoIntegrationTest extends TesteIntegracaoBase {
         UUID idServico = UUID.fromString(objectMapper.readTree(criado.getResponse().getContentAsString())
                 .get("idServico").asText());
 
-        mockMvc.perform(post(BASE_GUINCHO + "/{id}/proposta", idServico)
-                        .header("user-id", guincho.getId())
+        mockMvc.perform(post(BASE_GUINCHO + "/{id}/proposta", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(guincho))
                         .contentType("application/json")
                         .content("{\"valorProposto\":400.00,\"latitude\":%s,\"longitude\":%s}"
                                 .formatted(LATITUDE_PADRAO, LONGITUDE_PADRAO)))
@@ -202,11 +202,12 @@ class ServicoGuinchoIntegrationTest extends TesteIntegracaoBase {
     @DisplayName("chamado inexistente retorna 404 na proposta")
     void naoEncontrado404() throws Exception {
         String sufixo = sufixoUnico();
-        Entusiasta solicitante = criarColecionador(repositorioEntusiasta, emailUnico("g404" + sufixo), cpfUnico());
-        criarCarro(repositorioCarro, solicitante.getColecionador(), placaUnico());
+        Guincho guincho = criarGuincho(repositorioGuincho, emailUnico("g404" + sufixo), cnpjUnico(), placaUnico(),
+                LATITUDE_PADRAO, LONGITUDE_PADRAO);
 
         mockMvc.perform(post(BASE_GUINCHO + "/{id}/proposta", UUID.randomUUID())
-                        .header("user-id", solicitante.getId())
+                        .with(csrfToken())
+                        .header("Authorization", tokenDe(guincho))
                         .contentType("application/json")
                         .content("{\"valorProposto\":400.00}"))
                 .andExpect(status().isNotFound());

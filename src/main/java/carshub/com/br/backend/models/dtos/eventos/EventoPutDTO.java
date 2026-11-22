@@ -27,7 +27,7 @@ public record EventoPutDTO(
         String rua,
 
         @NotBlank(message = "O número é obrigatório")
-        @Size(max = 10, message = "O número não pode exceder 10 caracteres")
+        @Size(max = 5, message = "O número não pode exceder 5 caracteres")
         String numero,
 
         @Size(max = 50, message = "O complemento não pode exceder 50 caracteres")
@@ -37,11 +37,24 @@ public record EventoPutDTO(
         @Size(max = 50, message = "O bairro não pode exceder 50 caracteres")
         String bairro,
 
+        // F29: cidade, UF e CEP compoem o endereco usado na geocodificacao.
+        @NotBlank(message = "A cidade é obrigatória")
+        @Size(max = 50, message = "A cidade não pode exceder 50 caracteres")
+        String cidade,
+
+        @NotBlank(message = "A UF é obrigatória")
+        @Size(min = 2, max = 2, message = "A UF deve conter exatamente 2 caracteres")
+        String uf,
+
+        @NotBlank(message = "O CEP é obrigatório")
+        @Pattern(regexp = "\\d{8}", message = "O CEP deve conter exatamente 8 dígitos")
+        String cep,
+
         @NotNull(message = "A data de início é obrigatória")
         LocalDateTime dataHoraInicio,
 
         @NotNull(message = "A data de término é obrigatória")
         LocalDateTime dataHoraFim,
-        
+
         List<String> urlFotoEvento
 ) {}

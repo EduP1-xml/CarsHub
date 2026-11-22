@@ -1,30 +1,45 @@
+# =====================================================================
+# CarsHub — configuração do backend.
+# REGRA DE OURO: nenhuma credencial, senha ou chave de API pode aparecer
+# neste arquivo. Tudo o que é sensível vem EXCLUSIVAMENTE do ambiente
+# (arquivo .env carregado pelo docker compose, ou variáveis exportadas
+# na sessão do PowerShell para rodar pela IDE). Este yaml apenas
+# REFERENCIA as variáveis — sem valores hardcoded como fallback.
+# =====================================================================
 spring:
   application:
     name: backend
   servlet:
     multipart:
-      max-file-size: 15MB
-      max-request-size: 15MB
+      # 1.5 UPLOADS: limite global elevado de 15MB para 100MB.
+      max-file-size: 100MB
+      max-request-size: 100MB
 
   mail:
     host: smtp.gmail.com
     port: 587
-    username: plataformacarshub@gmail.com
-    password: lqjgcrvwdwoziphs
+    # Credenciais do Gmail/SMTP vêm do ambiente (MAIL_USERNAME/MAIL_PASSWORD).
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
     properties:
       mail:
         smtp:
           auth: true
           starttls:
             enable: true
-          connectiontimeout: 3000
-          timeout: 3000
-          writetimeout: 2000
+          # AJUSTE FINAL: timeouts ampliados para evitar erros 504 (SocketTimeoutException)
+          # em conexoes lentas. O Gmail normalmente responde em 1-3 s, mas redes
+          # instaveis (Wi-Fi, VPN, celular) estouravam os limites anteriores de 2-3 s.
+          connectiontimeout: 15000
+          timeout: 15000
+          writetimeout: 15000
 
   datasource:
+    # No Docker, o compose sobrepõe esta URL com SPRING_DATASOURCE_URL
+    # (host "db" da rede interna). As credenciais vêm do ambiente.
     url: jdbc:mysql://localhost:3307/carshub
-    username: root
-    password: root
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -41,30 +56,61 @@ spring:
 
 app:
   upload:
-    dir: ${APP_UPLOAD_DIR:uploads}
+    dir: ${APP_UPLOAD_DIR}
+  # SPRINT 6 (11.1): JWT access + refresh. O segredo vem SEMPRE do ambiente
+  # (JWT_SEGREDO) — a aplicacao NAO inicia sem ele (fail-fast no ServicoJwt).
+  seguranca:
+    jwt:
+      segredo: ${JWT_SEGREDO}
+      validade-acesso-minutos: ${JWT_ACESSO_MINUTOS}
+      validade-refresh-dias: ${JWT_REFRESH_DIAS}
+      emissor: ${JWT_EMISSOR}
+    # SPRINT 6 (11.8): rate limiting por IP com janela deslizante (em memoria).
+    rate-limit:
+      habilitado: ${RATE_LIMIT_HABILITADO}
+      janela-segundos: ${RATE_LIMIT_JANELA_SEGUNDOS}
+      requisicoes-por-janela: ${RATE_LIMIT_REQUISICOES_POR_JANELA}
+      login-por-minuto: ${RATE_LIMIT_LOGIN_POR_MINUTO}
+      refresh-por-minuto: ${RATE_LIMIT_REFRESH_POR_MINUTO}
+      cadastro-por-hora: ${RATE_LIMIT_CADASTRO_POR_HORA}
+  # SPRINT 6 (11.11): LGPD — retencao e anonimizacao dos comentarios de avaliacao.
+  lgpd:
+    anonimizacao-habilitada: ${LGPD_ANONIMIZACAO_HABILITADA}
+    dias-retencao-comentarios-servicos: ${LGPD_RETENCAO_COMENTARIOS_DIAS}
+  # 1.5 UPLOADS: storage compativel com S3 (RustFS/MinIO/AWS). Endpoint vazio = usa o
+  # disco local (uploads/). Pastas: uploads/{tipoUsuario}/{idUsuario}/{nomeFoto}.
+  storage:
+    s3:
+      endpoint: ${STORAGE_S3_ENDPOINT}
+      bucket: ${STORAGE_S3_BUCKET}
+      regiao: ${STORAGE_S3_REGIAO}
+      chaveAcesso: ${STORAGE_S3_CHAVE_ACESSO}
+      chaveSecreta: ${STORAGE_S3_CHAVE_SECRETA}
+      urlBase: ${STORAGE_S3_URL_BASE}
   servicos:
     # Tempo maximo, em minutos, que uma proposta espera resposta do colecionador
-    minutosExpiracaoProposta: ${MINUTOS_EXPIRACAO_PROPOSTA:30}
+    minutosExpiracaoProposta: ${MINUTOS_EXPIRACAO_PROPOSTA}
     # Tempo maximo, em horas, que um chamado pode ficar SOLICITADO na rede
-    horasExpiracaoSolicitacao: ${HORAS_EXPIRACAO_SOLICITACAO:3}
+    horasExpiracaoSolicitacao: ${HORAS_EXPIRACAO_SOLICITACAO}
   geocodificacao:
-    # Google Geocoding API. A chave fica SO no back: o front recebe apenas as
-    # coordenadas e o endereco ja formatado, nunca a credencial.
-    urlBase: ${GEOCODIFICACAO_URL_BASE:https://maps.googleapis.com/maps/api/geocode/json}
-    chave: ${GOOGLE_MAPS_API_KEY:}
-    tempoLimiteConexaoMs: ${GEOCODIFICACAO_TEMPO_LIMITE_CONEXAO_MS:3000}
+    # Google Geocoding API. A chave vem do ambiente (GOOGLE_MAPS_API_KEY) e fica
+    # SO no back: o front recebe apenas as coordenadas e o endereco ja formatado,
+    # nunca a credencial.
+    urlBase: ${GEOCODIFICACAO_URL_BASE}
+    chave: ${GOOGLE_MAPS_API_KEY}
+    tempoLimiteConexaoMs: ${GEOCODIFICACAO_TEMPO_LIMITE_CONEXAO_MS}
     # Caminho direto (endereco -> coordenada) e bloqueante: 3 s.
-    tempoLimiteLeituraDiretaMs: ${GEOCODIFICACAO_TEMPO_LIMITE_LEITURA_DIRETA_MS:3000}
+    tempoLimiteLeituraDiretaMs: ${GEOCODIFICACAO_TEMPO_LIMITE_LEITURA_DIRETA_MS}
     # Caminho reverso (coordenada -> endereco) e best-effort: 800 ms.
-    tempoLimiteLeituraReversaMs: ${GEOCODIFICACAO_TEMPO_LIMITE_LEITURA_REVERSA_MS:800}
+    tempoLimiteLeituraReversaMs: ${GEOCODIFICACAO_TEMPO_LIMITE_LEITURA_REVERSA_MS}
     # Resiliencia
-    tentativasExtras: ${GEOCODIFICACAO_TENTATIVAS_EXTRAS:2}
-    esperaEntreTentativasMs: ${GEOCODIFICACAO_ESPERA_ENTRE_TENTATIVAS_MS:250}
-    falhasParaAbrirCircuito: ${GEOCODIFICACAO_FALHAS_PARA_ABRIR_CIRCUITO:5}
-    segundosCircuitoAberto: ${GEOCODIFICACAO_SEGUNDOS_CIRCUITO_ABERTO:60}
+    tentativasExtras: ${GEOCODIFICACAO_TENTATIVAS_EXTRAS}
+    esperaEntreTentativasMs: ${GEOCODIFICACAO_ESPERA_ENTRE_TENTATIVAS_MS}
+    falhasParaAbrirCircuito: ${GEOCODIFICACAO_FALHAS_PARA_ABRIR_CIRCUITO}
+    segundosCircuitoAberto: ${GEOCODIFICACAO_SEGUNDOS_CIRCUITO_ABERTO}
     # Cota mensal: 40.000 requisicoes/mes no plano gratuito
-    limiteMensalRequisicoes: ${GEOCODIFICACAO_LIMITE_MENSAL:40000}
-    bloquearAoExcederLimite: ${GEOCODIFICACAO_BLOQUEAR_AO_EXCEDER:false}
+    limiteMensalRequisicoes: ${GEOCODIFICACAO_LIMITE_MENSAL}
+    bloquearAoExcederLimite: ${GEOCODIFICACAO_BLOQUEAR_AO_EXCEDER}
 
 frontend:
-  url: ${FRONTEND_URL:http://localhost:5173}
+  url: ${FRONTEND_URL}

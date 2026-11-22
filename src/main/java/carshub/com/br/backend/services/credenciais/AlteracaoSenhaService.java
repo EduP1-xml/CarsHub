@@ -6,6 +6,7 @@ import carshub.com.br.backend.models.dtos.RedefinicaoSenhaDTO;
 import carshub.com.br.backend.models.entities.Usuario;
 import carshub.com.br.backend.repositories.UsuarioRepository;
 import carshub.com.br.backend.services.email.EmailService;
+import carshub.com.br.backend.services.seguranca.ServicoAuditoria;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -52,6 +53,7 @@ public class AlteracaoSenhaService {
     private final CodigoVerificacaoService servicoCodigoVerificacao;
     private final EmailService servicoEmail;
     private final TransactionTemplate templateTransacao;
+    private final ServicoAuditoria servicoAuditoria;
 
     // ==================================================================
     // FLUXO LOGADO
@@ -78,6 +80,9 @@ public class AlteracaoSenhaService {
                 dados.codigo());
 
         aplicarNovaSenha(usuario, dados.novaSenha());
+
+        // SPRINT 6 (11.9): acao sensivel registrada na trilha de auditoria.
+        servicoAuditoria.registrar("SENHA_ALTERADA", usuario.getLogin(), null, usuario.getId(), true);
     }
 
     // ==================================================================
@@ -119,6 +124,9 @@ public class AlteracaoSenhaService {
                 dados.codigo());
 
         aplicarNovaSenha(usuario, dados.novaSenha());
+
+        // SPRINT 6 (11.9): acao sensivel registrada na trilha de auditoria.
+        servicoAuditoria.registrar("SENHA_REDEFINIDA", usuario.getLogin(), null, usuario.getId(), true);
     }
 
     // ==================================================================

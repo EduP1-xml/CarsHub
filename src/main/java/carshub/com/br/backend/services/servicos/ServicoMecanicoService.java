@@ -29,6 +29,7 @@ import carshub.com.br.backend.repositories.PrestadorServicoRepository;
 import carshub.com.br.backend.repositories.servicos.ServicoMecanicoRepository;
 import carshub.com.br.backend.services.file.FileStorageService;
 import carshub.com.br.backend.services.geocodificacao.GeocodificacaoService;
+import carshub.com.br.backend.services.seguranca.ServicoAuditoria;
 import carshub.com.br.backend.utils.DistanciaGeografica;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -100,6 +101,7 @@ public class ServicoMecanicoService {
     private final GeocodificacaoService servicoGeocodificacao;
     private final FileStorageService servicoArmazenamentoArquivo;
     private final ControleCooldown controleCooldown;
+    private final ServicoAuditoria servicoAuditoria;
 
     // ==================================================================
     // LADO DO COLECIONADOR
@@ -126,6 +128,11 @@ public class ServicoMecanicoService {
                 dados.latitude(), dados.longitude(), dados.endereco(),
                 colecionador.getLatitude(), colecionador.getLongitude(),
                 "Informe a localização da ocorrência (latitude e longitude do GPS ou o endereço) — ou atualize a localização do seu perfil.");
+
+        // F14: sem GPS, a localizacao vem do ENDERECO digitado (geocodificado)
+        // e as coordenadas resultantes ATUALIZAM o perfil do colecionador.
+        atualizarPerfilSeLocalizacaoVeioDoEndereco(
+                colecionador, dados.latitude(), dados.longitude(), dados.endereco(), localizacao);
 
         ServicoMecanico servico = new ServicoMecanico();
         servico.setEntusiasta(colecionador);
@@ -198,6 +205,9 @@ public class ServicoMecanicoService {
 
         liberarPropostasExcedentes(servico.getMecanico());
 
+        // SPRINT 6 (11.9): acao sensivel registrada na trilha de auditoria.
+        servicoAuditoria.registrar("PROPOSTA_ACEITA", idServico.toString(), null, idEntusiasta, true);
+
         return mapearParaResposta(buscarServicoPorId(idServico));
     }
 
@@ -236,6 +246,10 @@ public class ServicoMecanicoService {
             validarTempoMinimoParaCancelar(servico.getDataHoraPendente());
         }
 
+        // SPRINT 6 (11.9): acao sensivel registrada na trilha de auditoria.
+        servicoAuditoria.registrar("SERVICO_CANCELADO", idServico.toString(),
+                "status=" + servico.getStatus(), idEntusiasta, true);
+
         repositorioServicoMecanico.delete(servico);
     }
 
@@ -258,7 +272,7 @@ public class ServicoMecanicoService {
                     "A foto inicial já foi enviada e não pode ser substituída.");
         }
 
-        servico.setUrlFotoInicial(salvarFoto(arquivo, "a foto inicial do veículo"));
+        servico.setUrlFotoInicial(salvarFoto(arquivo, "a foto inicial do veículo", "colecionador", idEntusiasta));
         repositorioServicoMecanico.save(servico);
 
         return mapearParaResposta(buscarServicoPorId(idServico));
@@ -318,7 +332,7 @@ public class ServicoMecanicoService {
             throw new RegraDeNegocioException("Você já enviou a foto final deste serviço.");
         }
 
-        servico.setUrlFotoFinalEntusiasta(salvarFoto(arquivo, "a foto final do serviço"));
+        servico.setUrlFotoFinalEntusiasta(salvarFoto(arquivo, "a foto final do serviço", "colecionador", idEntusiasta));
         repositorioServicoMecanico.save(servico);
 
         return mapearParaResposta(buscarServicoPorId(idServico));
@@ -336,7 +350,7 @@ public class ServicoMecanicoService {
             throw new RegraDeNegocioException("Você já enviou a foto final deste serviço.");
         }
 
-        servico.setUrlFotoFinalMecanico(salvarFoto(arquivo, "a foto final do serviço"));
+        servico.setUrlFotoFinalMecanico(salvarFoto(arquivo, "a foto final do serviço", "mecanico", idMecanico));
         repositorioServicoMecanico.save(servico);
 
         return mapearParaResposta(buscarServicoPorId(idServico));
@@ -480,8 +494,10 @@ public class ServicoMecanicoService {
     public Page<ServicoRespostaDTO> listarMinhaFilaDeTrabalho(UUID idMecanico, int pagina, int tamanho) {
         buscarEValidarMecanico(idMecanico);
 
+        // F37: ordenada por prioridade de status no SQL (PENDENTE -> CHEGOU ->
+        // PROPOSTA -> FINALIZADO) preservando a paginacao nativa.
         Page<ServicoMecanico> paginaDeServicos = repositorioServicoMecanico
-                .findAllByMecanico_IdOrderByDataHoraSolicitacaoDesc(
+                .listarFilaDeTrabalhoPorPrioridade(
                         idMecanico, PaginaRespostaDTO.pageRequest(pagina, tamanho));
 
         Map<UUID, Long> ativosPorMecanico = Map.of(
@@ -681,6 +697,14 @@ public class ServicoMecanicoService {
         if (linhasAfetadas == 1) {
             ServicoMecanico finalizado = buscarServicoPorId(idServico);
             atualizarReputacaoDoMecanico(finalizado.getMecanico(), finalizado.getNotaAvaliacaoEntusiasta());
+            // Item 2: o prestador avaliou o colecionador — o agregado do
+            // entusiasta e atualizado na MESMA transacao de conclusao.
+            atualizarReputacaoDoEntusiasta(finalizado.getEntusiasta(), finalizado.getNotaAvaliacaoMecanico());
+
+            // SPRINT 6 (11.9): acao sensivel registrada na trilha de auditoria.
+            servicoAuditoria.registrar("SERVICO_CONCLUIDO", idServico.toString(),
+                    "mecanico=" + (finalizado.getMecanico() == null ? null : finalizado.getMecanico().getId()),
+                    finalizado.getEntusiasta() == null ? null : finalizado.getEntusiasta().getId(), true);
         }
 
         return mapearParaResposta(buscarServicoPorId(idServico));
@@ -703,6 +727,24 @@ public class ServicoMecanicoService {
         mecanico.setNotaMediaPrestador((mediaAtual * quantidadeAtual + nota) / (quantidadeAtual + 1.0));
         mecanico.setQuantidadeAvaliacoes(quantidadeAtual + 1);
         repositorioMecanico.save(mecanico);
+    }
+
+    /**
+     * Item 2: agregado de reputacao do ENTUSIASTA (colecionador) — media +
+     * quantidade das notas dadas pelos PRESTADORES, atualizado na conclusao do
+     * servico com o mesmo padrao do notaMediaPrestador dos prestadores.
+     */
+    private void atualizarReputacaoDoEntusiasta(Entusiasta entusiasta, Integer nota) {
+        if (entusiasta == null || nota == null) {
+            return;
+        }
+
+        double mediaAtual = entusiasta.getNotaMediaEntusiasta() == null ? 0.0 : entusiasta.getNotaMediaEntusiasta();
+        long quantidadeAtual = entusiasta.getQuantidadeAvaliacoes() == null ? 0L : entusiasta.getQuantidadeAvaliacoes();
+
+        entusiasta.setNotaMediaEntusiasta((mediaAtual * quantidadeAtual + nota) / (quantidadeAtual + 1.0));
+        entusiasta.setQuantidadeAvaliacoes(quantidadeAtual + 1);
+        repositorioEntusiasta.save(entusiasta);
     }
 
     // ==================================================================
@@ -851,6 +893,26 @@ public class ServicoMecanicoService {
     }
 
     /**
+     * F14: quando a localizacao do chamado NAO veio do GPS do aparelho e sim do
+     * ENDERECO digitado pelo colecionador, as coordenadas geocodificadas passam
+     * a ser as do perfil dele (economiza a proxima solicitacao). Com GPS na
+     * requisicao nada muda: as coordenadas do GPS NAO sobrescrevem o perfil.
+     */
+    private void atualizarPerfilSeLocalizacaoVeioDoEndereco(Entusiasta entusiasta,
+                                                            Double latitudeInformada, Double longitudeInformada,
+                                                            String enderecoInformado,
+                                                            LocalizacaoGeocodificadaDTO localizacao) {
+        boolean veioDoGps = latitudeInformada != null && longitudeInformada != null;
+        boolean veioDoEndereco = enderecoInformado != null && !enderecoInformado.isBlank();
+
+        if (!veioDoGps && veioDoEndereco) {
+            entusiasta.setLatitude(localizacao.latitude());
+            entusiasta.setLongitude(localizacao.longitude());
+            repositorioEntusiasta.save(entusiasta);
+        }
+    }
+
+    /**
      * O endereco legivel e o estruturado sao preenchidos aqui. Quando a localizacao
      * veio do GPS, tentamos a geocodificacao reversa (best-effort): se falhar, o
      * chamado continua valido com EnderecoOcorrenciaDTO.vazio().
@@ -906,12 +968,12 @@ public class ServicoMecanicoService {
     // ARQUIVOS
     // ==================================================================
 
-    private String salvarFoto(MultipartFile arquivo, String descricao) {
+    private String salvarFoto(MultipartFile arquivo, String descricao, String tipoUsuario, UUID idUsuario) {
         if (arquivo == null || arquivo.isEmpty()) {
             throw new IllegalArgumentException("Envie o arquivo da " + descricao + ".");
         }
 
-        return servicoArmazenamentoArquivo.salvarArquivo(arquivo);
+        return servicoArmazenamentoArquivo.salvarArquivo(arquivo, tipoUsuario, idUsuario);
     }
 
     // ==================================================================

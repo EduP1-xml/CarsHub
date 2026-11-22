@@ -1,0 +1,319 @@
+=====================================================================
+CarsHub — LEIAME (guia completo para rodar o projeto)
+=====================================================================
+
+Este arquivo ensina a colocar o CarsHub para rodar em qualquer máquina
+Windows. Há DOIS jeitos, escolha um:
+
+  OPÇÃO A — "Tudo" pelo Docker   (recomendada; é como o autor roda)
+  OPÇÃO B — Rodar na mão         (sem Docker para o backend; ideal para
+                                   quem quer debugar/editar o código)
+
+O pacote já vem com o arquivo .env PRONTO (preenchido pelo autor para a
+banca do TCC), então nenhuma configuração manual de segredos é necessária.
+
+---------------------------------------------------------------------
+1. O QUE É O PROJETO
+---------------------------------------------------------------------
+
+O CarsHub é uma plataforma de clássicos com:
+
+  - Backend:  API REST em Java 21 + Spring Boot 4 (porta 8080).
+  - Frontend: interface React + Vite (porta 5173) que consome a API em
+              http://localhost:8080/api/carshub (endereço fixo em
+              Frontend/src/api/client.ts — não alterar).
+  - Banco:    MySQL 8 (porta 3307, usuário root, senha root, schema
+              "carshub"). As tabelas são criadas automaticamente pelo
+              backend no primeiro start.
+  - Fotos:    storage compatível com S3 (RustFS) no modo Docker
+              (portas 9000 API / 9001 console); no modo manual as fotos
+              caem na pasta uploads/ do projeto (disco local).
+  - E-mails:  envio de códigos de verificação via SMTP do Gmail
+              (senha de app já configurada no .env).
+
+Serviços e portas:
+
+  carshub-db       MySQL 8            -> localhost:3307
+  carshub-backend  API Spring Boot    -> http://localhost:8080
+  carshub-rustfs   Storage S3 (fotos) -> localhost:9000 (API) e 9001 (console)
+  frontend (npm)   Interface          -> http://localhost:5173
+
+---------------------------------------------------------------------
+2. O .ENV (já vem preenchido no pacote)
+---------------------------------------------------------------------
+
+O arquivo .env fica na raiz e guarda todas as configurações sensíveis.
+Neste pacote ele já vem completo; você só precisa saber o que cada bloco
+faz, caso precise ajustar:
+
+  DB_USERNAME / DB_PASSWORD / MYSQL_ROOT_PASSWORD
+      Credenciais do MySQL (root/root no ambiente de desenvolvimento).
+
+  MAIL_USERNAME / MAIL_PASSWORD
+      Conta Gmail usada para enviar os códigos de verificação.
+      MAIL_PASSWORD é uma "senha de app" do Google (16 caracteres).
+      Se o envio falhar com erro 502 ("recusou a autenticação"), gere
+      uma nova em https://myaccount.google.com/apppasswords.
+
+  JWT_SEGREDO (32+ caracteres) + JWT_ACESSO_MINUTOS / JWT_REFRESH_DIAS /
+  JWT_EMISSOR
+      Assinatura dos tokens de acesso/refresh da sessão.
+
+  FRONTEND_URL=http://localhost:5173
+      Origem liberada no CORS (pode ser lista separada por vírgula).
+
+  GOOGLE_MAPS_API_KEY (opcional)
+      Geocodificação de endereços. Sem chave, a busca por endereço/
+      coordenadas no mapa fica limitada, mas o resto funciona.
+
+  STORAGE_S3_* 
+      Storage de fotos. Com STORAGE_S3_ENDPOINT vazio (como está), as
+      fotos vão para a pasta uploads/ (disco). No modo Docker, o compose
+      sobrepõe o endpoint para o RustFS automaticamente — não mexer.
+
+  APP_UPLOAD_DIR, MINUTOS_EXPIRACAO_PROPOSTA, HORAS_EXPIRACAO_SOLICITACAO,
+  RATE_LIMIT_*, LGPD_*
+      Configurações operacionais (uploads, prazos, rate limiting e LGPD).
+      Não precisam de ajuste.
+
+IMPORTANTE: a aplicação NÃO inicia sem as variáveis do .env (não há
+valores hardcoded no código). No modo Docker o compose injeta tudo
+sozinho; no modo manual você precisa carregá-las (passos na Opção B).
+
+---------------------------------------------------------------------
+3. OPÇÃO A — TUDO PELO DOCKER (recomendada)
+---------------------------------------------------------------------
+
+Pré-requisitos:
+  - Docker Desktop com WSL2 (único requisito do backend — não precisa
+    instalar Java nem Maven, eles ficam dentro do container).
+  - Node.js 20 LTS (só para rodar o frontend, que não fica em container).
+
+Passo a passo:
+
+  1) Extraia o zip para uma pasta FORA do OneDrive, por exemplo
+     C:\CarsHub.
+
+  2) Abra o Docker Desktop e espere o status ficar verde.
+
+  3) Abra o PowerShell NA PASTA do projeto (no Explorador, clique na
+     barra de endereço, digite "powershell" e Enter) e rode:
+
+         docker compose up -d --build
+
+     Na PRIMEIRA vez, o --build compila o backend dentro do container
+     (baixa Maven + dependências: pode levar de 10 a 30 minutos).
+     Nas próximas vezes, sem mudança de código, basta:
+
+         docker compose up -d
+
+  4) Espere o backend terminar de subir e aplique o SCRIPT ESPACIAL
+     UMA ÚNICA VEZ (ele depende das tabelas que o backend cria no
+     primeiro start; sem ele, a busca de serviços por localização
+     falha — o próprio backend avisa no log):
+
+         Get-Content .\db\servico-localizacao-espacial.sql -Raw | docker exec -i carshub-db mysql -u root -proot carshub
+
+     Depois, reinicie o backend para o aviso desaparecer:
+
+         docker compose restart backend
+
+  5) Confira que os 3 containers estão "Up":
+
+         docker compose ps
+
+     E o log do backend deve mostrar "Started BackendApplication":
+
+         docker compose logs backend
+
+  6) Suba o frontend (em OUTRO terminal):
+
+         cd Frontend
+         npm install
+         npm run dev
+
+  7) Pronto: abra http://localhost:5173 no navegador.
+     (API em http://localhost:8080 · banco em localhost:3307 root/root ·
+      console do storage em http://localhost:9001 com as credenciais
+      STORAGE_S3_CHAVE_ACESSO / STORAGE_S3_CHAVE_SECRETA do .env)
+
+---------------------------------------------------------------------
+4. OPÇÃO B — RODAR NA MÃO (sem Docker para o backend)
+---------------------------------------------------------------------
+
+Pré-requisitos:
+  - JDK 21 instalado (ex.: Azul Zulu 21). Confira com:  java -version
+  - Node.js 20 LTS.
+  - Maven NÃO é necessário: o projeto traz o wrapper (mvnw.cmd).
+  - Banco MySQL 8 em localhost:3307. Duas formas:
+        B1) Só o banco no Docker (mais fácil):
+                docker compose up -d db
+        B2) MySQL instalado na máquina: crie o schema "carshub" e deixe
+            o acesso root/root na porta 3307 (ou ajuste DB_USERNAME/
+            DB_PASSWORD no .env).
+
+Passo a passo:
+
+  1) Banco no ar (B1 ou B2 acima).
+
+  2) Carregue as variáveis do .env e suba o backend. No PowerShell,
+     NA PASTA do projeto:
+
+         Get-Content .env | ForEach-Object {
+           if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+             [System.Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process')
+           }
+         }
+         .\mvnw.cmd spring-boot:run
+
+     Alternativa pela IDE (IntelliJ): abra a pasta do projeto, crie a
+     configuração de execução do BackendApplication e copie as variáveis
+     do .env para o campo "Environment variables".
+
+  3) No PRIMEIRO start o backend cria as tabelas (ddl-auto: update).
+     Depois de ver "Started BackendApplication" no console, aplique o
+     script espacial UMA vez:
+        B1:  Get-Content .\db\servico-localizacao-espacial.sql -Raw | docker exec -i carshub-db mysql -u root -proot carshub
+        B2:  mysql -u root -p carshub < db\servico-localizacao-espacial.sql
+     e reinicie o backend.
+
+  4) Frontend (igual à Opção A):
+
+         cd Frontend
+         npm install
+         npm run dev
+
+  5) Abra http://localhost:5173.
+
+Observações do modo manual:
+  - Fotos: com STORAGE_S3_ENDPOINT vazio (estado atual do .env), os
+    uploads vão para a pasta uploads/ do projeto — o RustFS não é
+    necessário. Se quiser usar o RustFS mesmo assim: rode
+    "docker compose up -d rustfs" e no .env coloque
+    STORAGE_S3_ENDPOINT=http://localhost:9000 e
+    STORAGE_S3_URL_BASE=http://localhost:9000/carshub-uploads.
+  - O backend lê o banco em jdbc:mysql://localhost:3307/carshub.
+
+---------------------------------------------------------------------
+5. VERIFICAÇÃO RÁPIDA (checklist para a banca)
+---------------------------------------------------------------------
+
+  1) Cadastro em 3 etapas: conta → dados do perfil → código de 6 dígitos
+     recebido por e-mail (assunto "CarsHub - Código de verificação de
+     e-mail"). Se o e-mail não aparecer na caixa de entrada, confira a
+     pasta SPAM/lixo eletrônico.
+  2) Login com e-mail e senha (a senha deve seguir a política do site;
+     "Senha@123" funciona para testes). Conta não verificada não loga.
+  3) Perfil, garagem de clássicos, anúncios, serviços e eventos.
+  4) "Esqueci minha senha": envia código de recuperação por e-mail.
+     ATENÇÃO: por segurança, o reenvio de código tem intervalo mínimo de
+     60 segundos e a recuperação de senha de 24 horas — repetir antes
+     disso responde com a mesma mensagem sem enviar novo e-mail
+     (comportamento proposital).
+  5) Uploads de fotos: no modo Docker ficam no RustFS
+     (console em http://localhost:9001); no modo manual, na pasta
+     uploads/ do projeto.
+
+---------------------------------------------------------------------
+6. TESTES AUTOMATIZADOS (opcional)
+---------------------------------------------------------------------
+
+Pré-requisitos: banco no ar (passo 1 da Opção B1), JDK 21 e o script
+espacial aplicado. Na pasta do projeto:
+
+    .\mvnw.cmd test
+
+  - Roda os testes unitários e de integração (estes usam o MySQL REAL de
+    localhost:3307 e deixam os dados criados no banco — esperado).
+  - O serviço de e-mail e a geocodificação são mockados nos testes:
+    nenhum e-mail real é disparado.
+
+---------------------------------------------------------------------
+7. COMANDOS DO DIA A DIA
+---------------------------------------------------------------------
+
+  Subir a aplicação (sem recompilar)   docker compose up -d
+  Subir e recompilar o código          docker compose up -d --build
+  Parar (mantém os dados)              docker compose down
+  Ver os containers                    docker compose ps
+  Logs do backend                      docker compose logs -f backend
+  Logs do banco                        docker compose logs -f db
+  Reiniciar só o backend               docker compose restart backend
+  Apagar TUDO, inclusive dados         docker compose down -v   (cuidado)
+  Rodar o frontend                     cd Frontend; npm run dev
+  Rodar o backend na mão               carregar .env; .\mvnw.cmd spring-boot:run
+
+---------------------------------------------------------------------
+8. PROBLEMAS COMUNS
+---------------------------------------------------------------------
+
+  "error during connect ... docker API"
+      Docker Desktop não está aberto. Abra e espere ficar verde.
+
+  "port is already allocated" (3307 ou 8080)
+      Outro programa está usando a porta. Rode:
+          netstat -ano | findstr :3307   (e :8080)
+      e encerre o processo. Se for o MySQL do Windows, pare o serviço
+      "MySQL80" em services.msc (o projeto usa o MySQL do Docker).
+
+  Backend reiniciando no começo
+      O banco ainda não estava pronto. Espere ~30 s e rode
+      docker compose restart backend.
+
+  Primeira build lenta/travando (máquina com pouca RAM)
+      Feche IntelliJ/navegador durante a build; no Docker Desktop
+      (Settings > Resources) limite a memória do WSL para ~3 GB.
+
+  Erro de rede baixando dependências do Maven
+      Internet instável. Tente:  docker compose build --no-cache
+
+  E-mail com código de verificação não chega
+      1) Confira a pasta SPAM/lixo eletrônico do e-mail de destino.
+      2) Respeite os intervalos de reenvio (60 s / 24 h — seção 5).
+      3) Se o backend responder 502 na tela, gere uma nova senha de app
+         em https://myaccount.google.com/apppasswords e atualize
+         MAIL_PASSWORD no .env; depois:
+         docker compose up -d --force-recreate backend
+
+  Busca de serviços por localização vazia
+      Script espacial não aplicado. Rode o comando da seção 3 (passo 4).
+
+---------------------------------------------------------------------
+9. MIGRAR DADOS DE OUTRA MÁQUINA (opcional)
+---------------------------------------------------------------------
+
+Opção A — MySQL Workbench:
+  1) Máquina antiga: conecte em 127.0.0.1:3307 → Server > Data Export
+     → exporte o schema "carshub".
+  2) Máquina nova: Server > Data Import → importe os arquivos.
+
+Opção B — Comandos (na pasta do projeto, repare no "cmd /c" que evita
+problema de codificação do PowerShell):
+
+  Exportar (máquina antiga):
+      cmd /c "docker exec carshub-db mysqldump -uroot -proot carshub > backup.sql"
+
+  Importar (máquina nova, com o carshub-db rodando):
+      cmd /c "type backup.sql | docker exec -i carshub-db mysql -uroot -proot carshub"
+
+---------------------------------------------------------------------
+10. ESTRUTURA DE PASTAS (o que importa)
+---------------------------------------------------------------------
+
+  Dockerfile / docker-compose.yaml / pom.xml   build e orquestração
+  src/                                        código-fonte do backend
+  Frontend/src                                código-fonte do frontend
+  db/servico-localizacao-espacial.sql         script espacial (aplicar 1x)
+  .env                                        configurações prontas (JÁ INCLUÍDO)
+  uploads/                                    fotos no modo manual
+  mvnw / mvnw.cmd / .mvn/                     Maven Wrapper (modo manual/testes)
+  target/, Frontend/node_modules, Frontend/dist
+                                              saídas de build — podem ser
+                                              apagadas/recriadas à vontade
+  Deepseek/, scripts/, postman/, .postman/
+                                              artefatos auxiliares de
+                                              desenvolvimento — não são
+                                              necessários para rodar
+
+Boa avaliação! Em caso de dúvida, siga a seção 3 (Docker) que é o
+caminho testado pelo autor.

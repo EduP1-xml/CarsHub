@@ -43,6 +43,18 @@ public class Entusiasta extends Usuario {
     private LocalDateTime dataHoraUltimaSolicitacaoServico;
 
     // ========================================================
+    // REPUTACAO (item 2 - avaliacao do prestador sobre o colecionador)
+    // ========================================================
+
+    /** Media crua das notas dadas pelos prestadores a este entusiasta/colecionador. */
+    @Column(name = "notaMediaEntusiasta_Entusiasta")
+    private Double notaMediaEntusiasta = 0.0;
+
+    /** Quantidade de avaliacoes que compoem a media acima. */
+    @Column(name = "quantidadeAvaliacoes_Entusiasta")
+    private Long quantidadeAvaliacoes = 0L;
+
+    // ========================================================
     // MÉTODOS DE REGRA DE NEGÓCIO (POO)
     // ========================================================
 

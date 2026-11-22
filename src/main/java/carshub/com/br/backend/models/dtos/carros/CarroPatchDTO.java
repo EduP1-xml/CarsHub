@@ -2,8 +2,11 @@ package carshub.com.br.backend.models.dtos.carros;
 
 import carshub.com.br.backend.models.enums.carros.*;
 import java.math.BigDecimal;
-import java.util.List;
 
+/**
+ * AVISO 7.8: as fotos deixaram de vir como lista de URLs no JSON — o PATCH
+ * multipart aceita as partes opcionais foto1/foto2 (troca slot a slot).
+ */
 public record CarroPatchDTO(
         String marca,
         String modelo,
@@ -18,7 +21,7 @@ public record CarroPatchDTO(
         TipoCombustivel combustivel,
         TipoCambio cambio,
         TipoTracao tracao,
-        TipoSuspensao suspencao,
+        TipoSuspensao suspensao,
         TipoFreio freio,
         TipoDirecao direcao,
         TipoRoda roda,
@@ -30,6 +33,5 @@ public record CarroPatchDTO(
         Boolean vidrosEletricos,
         Boolean som,
         Boolean arCondicionado,
-        Boolean tetoSolar,
-        List<String> fotosCarro
+        Boolean tetoSolar
 ) {}

@@ -72,7 +72,7 @@ public class EventoService {
         if (arquivos != null && !arquivos.isEmpty()) {
             for (MultipartFile arquivo : arquivos) {
                 if (arquivo != null && !arquivo.isEmpty()) {
-                    String uriDownloadArquivo = servicoArmazenamentoArquivo.salvarArquivo(arquivo);
+                    String uriDownloadArquivo = servicoArmazenamentoArquivo.salvarArquivo(arquivo, "organizador", idOrganizador);
                     urlsFotos.add(uriDownloadArquivo);
                 }
             }
@@ -105,7 +105,7 @@ public class EventoService {
     }
 
     @Transactional
-    public EventoRespostaDTO substituirEvento(UUID idEvento, EventoPutDTO dados, UUID idOrganizador) {
+    public EventoRespostaDTO substituirEvento(UUID idEvento, EventoPutDTO dados, List<MultipartFile> arquivos, UUID idOrganizador) {
         validarConflitoDeDatas(dados.dataHoraInicio(), dados.dataHoraFim());
 
         Evento evento = verificarPropriedadeDoEvento(idEvento, idOrganizador);
@@ -115,10 +115,23 @@ public class EventoService {
             throw new RegraDeNegocioException("Não é possível alterar a data de início de um evento que já começou.");
         }
 
+        // F31: so re-geocodifica quando o ENDERECO mudou. Endereco igual mantem
+        // as coordenadas ja gravadas (sem chamada de API desnecessaria).
+        boolean enderecoAlterado = !dados.rua().equals(evento.getRua())
+                || !dados.numero().equals(evento.getNumero())
+                || !java.util.Objects.equals(dados.bairro(), evento.getBairro())
+                || !dados.cidade().equals(evento.getCidade())
+                || !dados.uf().equals(evento.getUf())
+                || !dados.cep().equals(evento.getCep());
+
         mapearPutDtoParaEntidade(evento, dados);
 
-        // O PUT substitui o endereco inteiro: as coordenadas sao recalculadas sempre.
-        preencherCoordenadasDoEvento(evento);
+        if (enderecoAlterado) {
+            preencherCoordenadasDoEvento(evento);
+        }
+
+        // AVISO 7.9: PUT multipart — quando ha arquivos, as fotos sao substituidas.
+        substituirFotosSeHouverArquivos(evento, arquivos, dados.urlFotoEvento(), idOrganizador);
 
         Evento eventoAtualizado = repositorioEvento.save(evento);
 
@@ -126,7 +139,7 @@ public class EventoService {
     }
 
     @Transactional
-    public EventoRespostaDTO atualizarEventoCondicional(UUID idEvento, EventoPatchDTO dados, UUID idOrganizador) {
+    public EventoRespostaDTO atualizarEventoCondicional(UUID idEvento, EventoPatchDTO dados, List<MultipartFile> arquivos, UUID idOrganizador) {
         Evento evento = verificarPropriedadeDoEvento(idEvento, idOrganizador);
 
         LocalDateTime novaDataInicio = dados.dataHoraInicio() != null ? dados.dataHoraInicio() : evento.getDataHoraInicio();
@@ -160,6 +173,19 @@ public class EventoService {
             enderecoAlterado = enderecoAlterado || !dados.bairro().equals(evento.getBairro());
             evento.setBairro(dados.bairro());
         }
+        // F29: cidade/UF/CEP tambem disparam a regeocodificacao quando mudam.
+        if (dados.cidade() != null && !dados.cidade().isBlank()) {
+            enderecoAlterado = enderecoAlterado || !dados.cidade().equals(evento.getCidade());
+            evento.setCidade(dados.cidade());
+        }
+        if (dados.uf() != null && !dados.uf().isBlank()) {
+            enderecoAlterado = enderecoAlterado || !dados.uf().equals(evento.getUf());
+            evento.setUf(dados.uf());
+        }
+        if (dados.cep() != null && !dados.cep().isBlank()) {
+            enderecoAlterado = enderecoAlterado || !dados.cep().equals(evento.getCep());
+            evento.setCep(dados.cep());
+        }
 
         if (dados.nome() != null && !dados.nome().isBlank()) evento.setNome(dados.nome());
         if (dados.descricao() != null && !dados.descricao().isBlank()) evento.setDescricao(dados.descricao());
@@ -167,7 +193,10 @@ public class EventoService {
         if (dados.limiteParticipantes() != null) evento.setLimiteParticipantes(dados.limiteParticipantes());
         if (dados.complemento() != null) evento.setComplemento(dados.complemento());
         if (dados.dataHoraFim() != null) evento.setDataHoraFim(dados.dataHoraFim());
-        if (dados.urlFotoEvento() != null) evento.setUrlFotoEvento(dados.urlFotoEvento());
+
+        // AVISO 7.9: PATCH multipart — com arquivos, as fotos sao substituidas;
+        // sem arquivos, a lista de URLs do JSON continua valendo (compatibilidade).
+        substituirFotosSeHouverArquivos(evento, arquivos, dados.urlFotoEvento(), idOrganizador);
 
         if (enderecoAlterado) {
             preencherCoordenadasDoEvento(evento);
@@ -216,7 +245,11 @@ public class EventoService {
                 evento.getNome(), enderecoCompleto, localizacao.latitude(), localizacao.longitude());
     }
 
-    /** O complemento fica de fora: "Apto 12" piora a precisao do geocodificador. */
+    /**
+     * F29: o endereco completo usado na geocodificacao passa a incluir cidade,
+     * UF e CEP (melhor precisao do pino e base para calculo de proximidade).
+     * O complemento fica de fora: "Apto 12" piora a precisao do geocodificador.
+     */
     private String montarEnderecoDoEvento(Evento evento) {
         StringBuilder endereco = new StringBuilder()
                 .append(evento.getRua())
@@ -225,6 +258,18 @@ public class EventoService {
 
         if (evento.getBairro() != null && !evento.getBairro().isBlank()) {
             endereco.append(" - ").append(evento.getBairro());
+        }
+
+        if (evento.getCidade() != null && !evento.getCidade().isBlank()) {
+            endereco.append(", ").append(evento.getCidade());
+        }
+
+        if (evento.getUf() != null && !evento.getUf().isBlank()) {
+            endereco.append(" - ").append(evento.getUf());
+        }
+
+        if (evento.getCep() != null && !evento.getCep().isBlank()) {
+            endereco.append(", CEP ").append(evento.getCep());
         }
 
         return endereco.toString();
@@ -259,6 +304,9 @@ public class EventoService {
         evento.setNumero(dados.numero());
         evento.setComplemento(dados.complemento());
         evento.setBairro(dados.bairro());
+        evento.setCidade(dados.cidade());
+        evento.setUf(dados.uf());
+        evento.setCep(dados.cep());
         evento.setDataHoraInicio(dados.dataHoraInicio());
         evento.setDataHoraFim(dados.dataHoraFim());
     }
@@ -272,10 +320,42 @@ public class EventoService {
         evento.setNumero(dados.numero());
         evento.setComplemento(dados.complemento());
         evento.setBairro(dados.bairro());
+        evento.setCidade(dados.cidade());
+        evento.setUf(dados.uf());
+        evento.setCep(dados.cep());
         evento.setDataHoraInicio(dados.dataHoraInicio());
         evento.setDataHoraFim(dados.dataHoraFim());
         if (dados.urlFotoEvento() != null) {
             evento.setUrlFotoEvento(dados.urlFotoEvento());
+        }
+    }
+
+    /**
+     * AVISO 7.9: PUT/PATCH multipart substituem as fotos quando ha arquivos
+     * (maximo 3). Sem arquivos, vale a lista de URLs vinda no JSON (ou as
+     * fotos atuais, no PATCH).
+     */
+    private void substituirFotosSeHouverArquivos(Evento evento, List<MultipartFile> arquivos, List<String> urlsDoJson, UUID idOrganizador) {
+        if (arquivos != null && !arquivos.isEmpty()) {
+            if (arquivos.size() > 3) {
+                throw new IllegalArgumentException("É permitido enviar no máximo 3 fotos por evento.");
+            }
+
+            List<String> urlsFotos = new ArrayList<>();
+            for (MultipartFile arquivo : arquivos) {
+                if (arquivo != null && !arquivo.isEmpty()) {
+                    urlsFotos.add(servicoArmazenamentoArquivo.salvarArquivo(arquivo, "organizador", idOrganizador));
+                }
+            }
+            evento.setUrlFotoEvento(urlsFotos);
+            return;
+        }
+
+        if (urlsDoJson != null) {
+            if (urlsDoJson.size() > 3) {
+                throw new IllegalArgumentException("É permitido enviar no máximo 3 fotos por evento.");
+            }
+            evento.setUrlFotoEvento(urlsDoJson);
         }
     }
 
@@ -290,12 +370,16 @@ public class EventoService {
                 evento.getNumero(),
                 evento.getComplemento(),
                 evento.getBairro(),
+                evento.getCidade(),
+                evento.getUf(),
+                evento.getCep(),
                 evento.getLatitude(),
                 evento.getLongitude(),
                 evento.getStatus(),
                 evento.getOrganizadorEvento().getNome(),
                 evento.getDataHoraInicio(),
-                evento.getDataHoraFim()
+                evento.getDataHoraFim(),
+                evento.getUrlFotoEvento() != null ? List.copyOf(evento.getUrlFotoEvento()) : List.of()
         );
     }
 }

@@ -2,6 +2,8 @@ package carshub.com.br.backend.repositories;
 
 import carshub.com.br.backend.models.entities.Inscricao;
 import carshub.com.br.backend.models.enums.inscricoes.StatusInscricao;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,6 +21,10 @@ public interface InscricaoRepository extends JpaRepository<Inscricao, UUID> {
     
     // Lista todas as inscrições de um usuário específico
     List<Inscricao> findAllByEntusiasta_Id(UUID idEntusiasta);
+
+    // AJUSTE 1.3 (pendencia): minhas inscricoes PAGINADAS no SQL, da mais recente
+    // para a mais antiga (ordena por data desc).
+    Page<Inscricao> findAllByEntusiasta_IdOrderByDataDesc(UUID idEntusiasta, Pageable pageable);
 
     // Soma todas as inscrições CONFIRMADAS de todos os eventos de um organizador
     @Query("SELECT COUNT(i) FROM Inscricao i WHERE i.evento.organizadorEvento.id = :idOrganizador AND i.status = :status")

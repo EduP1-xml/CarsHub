@@ -1,4 +1,70 @@
+# =====================================================================
+# Configuração do PROFILE "test" (suíte de integração).
+# O application.yaml não tem mais fallback nenhum (tudo vem do ambiente),
+# então este arquivo fornece valores LOCAIS DE TESTE para o contexto
+# Spring subir sem variáveis de ambiente. Nenhum valor daqui é usado em
+# produção — credenciais reais vivem apenas no .env (fora do git).
+# =====================================================================
 spring:
   task:
     scheduling:
       enabled: false
+  mail:
+    # EmailService é mockado na suíte; valores só para o contexto subir.
+    username: teste@carshub.local
+    password: senha-apenas-de-teste
+  datasource:
+    # Banco MySQL REAL de desenvolvimento (localhost:3307), o mesmo usado
+    # manualmente. Credenciais locais de teste — nunca de produção.
+    username: root
+    password: root
+
+app:
+  upload:
+    dir: uploads
+  seguranca:
+    jwt:
+      segredo: segredo-de-teste-integracao-carshub-com-mais-de-32-caracteres
+      validade-acesso-minutos: 15
+      validade-refresh-dias: 7
+      emissor: carshub-api
+    # SPRINT 6 (11.8): rate limit desligado na suíte — as classes de teste fazem
+    # muitas requisicoes do mesmo IP (127.0.0.1) e o balde global estouraria.
+    # O RateLimitIntegrationTest liga o filtro de novo com limites apertados.
+    rate-limit:
+      habilitado: false
+      janela-segundos: 60
+      requisicoes-por-janela: 120
+      login-por-minuto: 10
+      refresh-por-minuto: 30
+      cadastro-por-hora: 20
+  lgpd:
+    anonimizacao-habilitada: true
+    dias-retencao-comentarios-servicos: 365
+  storage:
+    s3:
+      # Endpoint vazio = disco local (uploads/). Geocodificação mockada.
+      endpoint: ""
+      bucket: carshub-uploads
+      regiao: us-east-1
+      chaveAcesso: ""
+      chaveSecreta: ""
+      urlBase: ""
+  servicos:
+    minutosExpiracaoProposta: 30
+    horasExpiracaoSolicitacao: 3
+  geocodificacao:
+    urlBase: https://maps.googleapis.com/maps/api/geocode/json
+    chave: ""
+    tempoLimiteConexaoMs: 3000
+    tempoLimiteLeituraDiretaMs: 3000
+    tempoLimiteLeituraReversaMs: 800
+    tentativasExtras: 2
+    esperaEntreTentativasMs: 250
+    falhasParaAbrirCircuito: 5
+    segundosCircuitoAberto: 60
+    limiteMensalRequisicoes: 40000
+    bloquearAoExcederLimite: false
+
+frontend:
+  url: http://localhost:5173

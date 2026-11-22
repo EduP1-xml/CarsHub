@@ -12,6 +12,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 public interface EventoRepository extends JpaRepository<Evento, UUID> {
@@ -31,13 +33,28 @@ public interface EventoRepository extends JpaRepository<Evento, UUID> {
     @Query("""
             SELECT new carshub.com.br.backend.models.dtos.eventos.CatalogoEventoProjecaoDTO(
                    e.id, e.nome, e.descricao, e.preco, e.rua, e.numero, e.bairro,
-                   e.latitude, e.longitude, e.organizadorEvento.nome, e.limiteParticipantes,
-                   e.dataHoraInicio, e.dataHoraFim)
+                   e.cidade, e.uf, e.cep, e.latitude, e.longitude, e.organizadorEvento.nome,
+                   e.organizadorEvento.login,
+                   e.limiteParticipantes, e.dataHoraInicio, e.dataHoraFim)
               FROM Evento e
              WHERE e.status = :status
              ORDER BY e.dataHoraInicio ASC
             """)
     Page<CatalogoEventoProjecaoDTO> projetarCatalogoAtivos(@Param("status") StatusEvento status, Pageable pageable);
+
+    /**
+     * AVISO 7.4: fotos dos eventos de UMA pagina do catalogo levantadas em UMA
+     * consulta (a colecao urlFotoEvento e lazy e nao entra na projecao de
+     * escalares). O par (idEvento, url) e montado em Map pelo service.
+     */
+    @Query("""
+            SELECT e.id, f
+              FROM Evento e
+              JOIN e.urlFotoEvento f
+             WHERE e.id IN :ids
+             ORDER BY e.dataHoraInicio ASC
+            """)
+    List<Object[]> buscarFotosDosEventos(@Param("ids") Collection<UUID> ids);
 
     /**
      * AJUSTE 1.1b: PROJECAO do historico do dashboard. Traz a dataHoraFim porque

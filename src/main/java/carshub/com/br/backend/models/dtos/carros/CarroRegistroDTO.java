@@ -19,7 +19,7 @@ public record CarroRegistroDTO(
         @NotNull TipoCombustivel combustivel,
         @NotNull TipoCambio cambio,
         @NotNull TipoTracao tracao,
-        @NotNull TipoSuspensao suspencao,
+        @NotNull TipoSuspensao suspensao,
         @NotNull TipoFreio freio,
         @NotNull TipoDirecao direcao,
         @NotNull TipoRoda roda,
@@ -32,5 +32,7 @@ public record CarroRegistroDTO(
         @NotNull Boolean som,
         @NotNull Boolean arCondicionado,
         @NotNull Boolean tetoSolar,
-        @NotNull List<String> urlFotoCarro
+        // F13: @NotNull removido — as fotos podem vir via multipart (arquivos)
+        // e a lista de URLs no JSON deixou de ser obrigatoria.
+        List<String> urlFotoCarro
 ) {}

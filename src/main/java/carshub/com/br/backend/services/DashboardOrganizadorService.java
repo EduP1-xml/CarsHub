@@ -70,8 +70,10 @@ public class DashboardOrganizadorService {
 
         List<UUID> ids = eventos.stream().map(EventoHistoricoProjecaoDTO::idEvento).toList();
 
+        // F34: totalParticipantes conta apenas as inscricoes CONFIRMADAS — uma
+        // inscricao cancelada DIMINUI o contador (nao entra no historico).
         Map<UUID, Long> participantesPorEvento = new HashMap<>();
-        for (Object[] linha : inscricaoRepository.contarTodasPorEventos(ids)) {
+        for (Object[] linha : inscricaoRepository.contarConfirmadasPorEventos(ids, StatusInscricao.CONFIRMADA)) {
             participantesPorEvento.put((UUID) linha[0], (Long) linha[1]);
         }
 

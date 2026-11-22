@@ -143,7 +143,7 @@ public final class FabricaDeDados {
         carro.setCombustivel(TipoCombustivel.FLEX);
         carro.setCambio(TipoCambio.MANUAL);
         carro.setTracao(TipoTracao.DIANTEIRA);
-        carro.setSuspencao(TipoSuspensao.FIXA);
+        carro.setSuspensao(TipoSuspensao.FIXA);
         carro.setFreio(TipoFreio.DISCO);
         carro.setDirecao(TipoDirecao.HIDRAULICA);
         carro.setRoda(TipoRoda.LIGA_LEVE);

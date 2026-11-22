@@ -1,5 +1,9 @@
 package carshub.com.br.backend.controllers.servicos;
 
+import carshub.com.br.backend.config.UsuarioAutenticado;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.servicos.PrestadorCompativelDTO;
 import carshub.com.br.backend.models.dtos.servicos.ServicoRespostaDTO;
@@ -18,18 +22,20 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/carshub/colecionador/servicos")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('ENTUSIASTA')")
 public class PainelServicoController {
 
     private final PainelServicoService painelServico;
 
     @GetMapping
     public ResponseEntity<PaginaRespostaDTO<ServicoRespostaDTO>> listarSolicitacoesAtivas(
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 
-        List<ServicoRespostaDTO> solicitacoes = painelServico.listarSolicitacoesAtivas(id);
-        return ResponseEntity.ok(PaginaRespostaDTO.de(solicitacoes, pagina, tamanho));
+        // AJUSTE 1.3 (pendencia): a paginacao (janela) agora acontece no service,
+        // que usa as versoes paginadas no SQL de cada tipo de servico.
+        return ResponseEntity.ok(painelServico.listarSolicitacoesAtivas(id, pagina, tamanho));
     }
 
     /**
@@ -39,7 +45,7 @@ public class PainelServicoController {
     @GetMapping("/{idServico}/prestadores-compativeis")
     public ResponseEntity<PaginaRespostaDTO<PrestadorCompativelDTO>> listarPrestadoresCompativeis(
             @PathVariable UUID idServico,
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 

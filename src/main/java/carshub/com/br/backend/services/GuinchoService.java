@@ -4,6 +4,7 @@ import carshub.com.br.backend.exceptions.PlacaJaCadastradaException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.models.dtos.AlteracaoSenhaDTO;
 import carshub.com.br.backend.models.dtos.LatitudeLongitudeDTO;
+import carshub.com.br.backend.models.dtos.PerfilUsuarioDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilGuinchoPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilGuinchoPutDTO;
 import carshub.com.br.backend.models.entities.Guincho;
@@ -21,6 +22,12 @@ public class GuinchoService {
 
     private final GuinchoRepository repositorioGuincho;
     private final AlteracaoSenhaService servicoAlteracaoSenha;
+
+    /** REGRA 4.1: GET do proprio perfil (sem latitude/longitude). */
+    @Transactional(readOnly = true)
+    public PerfilUsuarioDTO buscarPerfil(UUID id) {
+        return new PerfilUsuarioDTO(buscarGuinchoOuLancarExcecao(id));
+    }
 
     @Transactional
     public Guincho substituirPerfil(UUID id, PerfilGuinchoPutDTO dados) {

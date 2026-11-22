@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -121,7 +122,7 @@ public class GlobalException {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<String> arquivoMuitoGrande(MaxUploadSizeExceededException ex) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
-                .body("O arquivo enviado excede o tamanho máximo permitido (15MB).");
+                .body("O arquivo enviado excede o tamanho máximo permitido (100MB).");
     }
 
     // ==================================================================
@@ -133,6 +134,23 @@ public class GlobalException {
         return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
                 .body("O Content-Type '" + ex.getContentType() + "' não é suportado nesta rota. "
                         + "Envie o corpo como application/json (aba raw no Postman).");
+    }
+
+    /**
+     * 1.5 UPLOADS: formato de imagem indevido (nao e JPG/JPEG/PNG).
+     */
+    @ExceptionHandler(FormatoImagemInvalidoException.class)
+    public ResponseEntity<String> formatoImagemInvalido(FormatoImagemInvalidoException ex) {
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(ex.getMessage());
+    }
+
+    // ==================================================================
+    // 400 - NOME DE ARQUIVO INDEVIDO (1.5 UPLOADS)
+    // ==================================================================
+
+    @ExceptionHandler(NomeArquivoInvalidoException.class)
+    public ResponseEntity<String> nomeArquivoInvalido(NomeArquivoInvalidoException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
     }
 
     // ==================================================================
@@ -154,12 +172,43 @@ public class GlobalException {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
     }
 
+    /**
+     * Rota/arquivo inexistente tratado pelo ResourceHttpRequestHandler do Spring
+     * (ex.: GET /uploads/nao-existe.png ou uma URL sem handler mapeado).
+     * Sem este handler, o catch-all responderia 500 "erro interno" e poluiria o
+     * log com ERROR + stack trace - aqui e erro do CLIENTE (404).
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<String> recursoEstaticoNaoEncontrado(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Recurso não encontrado.");
+    }
+
     // ==================================================================
     // 401 - NAO AUTENTICADO
     // ==================================================================
 
     @ExceptionHandler(SenhaIncorretaException.class)
     public ResponseEntity<String> senhaIncorreta(SenhaIncorretaException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ex.getMessage());
+    }
+
+    // ==================================================================
+    // 401 - JWT INVALIDO / NAO AUTENTICADO (SPRINT 6 — 11.1/11.4)
+    // ==================================================================
+
+    /**
+     * Token invalido/adulterado/expirado ou do tipo errado lancado DENTRO do
+     * DispatcherServlet (ex.: renovacao de tokens). Na cadeia de filtros o
+     * FiltroJwtAutenticacao escreve o 401 direto na resposta.
+     */
+    @ExceptionHandler(TokenJwtInvalidoException.class)
+    public ResponseEntity<String> tokenJwtInvalido(TokenJwtInvalidoException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ex.getMessage());
+    }
+
+    /** @UsuarioAutenticado obrigatorio sem usuario no SecurityContext. */
+    @ExceptionHandler(NaoAutenticadoException.class)
+    public ResponseEntity<String> naoAutenticado(NaoAutenticadoException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ex.getMessage());
     }
 

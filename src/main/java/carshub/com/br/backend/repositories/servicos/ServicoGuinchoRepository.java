@@ -36,6 +36,26 @@ public interface ServicoGuinchoRepository extends JpaRepository<ServicoGuincho, 
 
     Page<ServicoGuincho> findAllByGuincho_IdOrderByDataHoraSolicitacaoDesc(UUID idGuincho, Pageable pageable);
 
+    /**
+     * F37: fila de trabalho do guincho ordenada por prioridade de status —
+     * aceitas (PENDENTE), em andamento (CHEGOU), propostas enviadas (PROPOSTA)
+     * e finalizadas (FINALIZADO) — e, dentro de cada grupo, do mais recente
+     * para o mais antigo. A ordenacao fica no SQL para preservar a paginacao.
+     */
+    @Query("""
+            SELECT s FROM ServicoGuincho s
+             WHERE s.guincho.id = :idGuincho
+             ORDER BY CASE s.status
+                        WHEN carshub.com.br.backend.models.enums.servicos.StatusServico.PENDENTE THEN 0
+                        WHEN carshub.com.br.backend.models.enums.servicos.StatusServico.CHEGOU THEN 1
+                        WHEN carshub.com.br.backend.models.enums.servicos.StatusServico.PROPOSTA THEN 2
+                        WHEN carshub.com.br.backend.models.enums.servicos.StatusServico.FINALIZADO THEN 3
+                        ELSE 4
+                      END,
+                      s.dataHoraSolicitacao DESC
+            """)
+    Page<ServicoGuincho> listarFilaDeTrabalhoPorPrioridade(@Param("idGuincho") UUID idGuincho, Pageable pageable);
+
     Page<ServicoGuincho> findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(UUID idCarro, StatusServico status, Pageable pageable);
 
     List<ServicoGuincho> findAllByStatusAndDataHoraSolicitacaoBefore(StatusServico status, LocalDateTime limite);
@@ -218,4 +238,22 @@ public interface ServicoGuinchoRepository extends JpaRepository<ServicoGuincho, 
     int liberarPropostasExpiradas(@Param("limite") LocalDateTime limite,
                                   @Param("statusNovo") StatusServico statusNovo,
                                   @Param("statusEsperado") StatusServico statusEsperado);
+
+    /**
+     * SPRINT 6 (11.11 — LGPD): anonimiza os COMENTARIOS de avaliacao (texto
+     * livre do titular) dos servicos FINALIZADOS ha mais tempo que a retencao
+     * configurada (app.lgpd.dias-retencao-comentarios-servicos).
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ServicoGuincho s
+               SET s.comentarioAvaliacaoEntusiasta = null,
+                   s.comentarioAvaliacaoGuincho = null
+             WHERE s.status = :statusFinalizado
+               AND s.dataHoraFinalizacao < :limite
+               AND (s.comentarioAvaliacaoEntusiasta IS NOT NULL
+                    OR s.comentarioAvaliacaoGuincho IS NOT NULL)
+            """)
+    int anonimizarComentariosFinalizados(@Param("limite") LocalDateTime limite,
+                                         @Param("statusFinalizado") StatusServico statusFinalizado);
 }

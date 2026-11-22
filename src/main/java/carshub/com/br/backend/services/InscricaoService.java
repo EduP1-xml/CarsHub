@@ -3,6 +3,7 @@ package carshub.com.br.backend.services;
 import carshub.com.br.backend.exceptions.PerfilIncompativelException;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.exceptions.RegraDeNegocioException;
+import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.inscricoes.InscricaoRegistroDTO;
 import carshub.com.br.backend.models.dtos.inscricoes.InscricaoResponseDTO;
 import carshub.com.br.backend.models.entities.Carro;
@@ -16,12 +17,11 @@ import carshub.com.br.backend.repositories.EntusiastaRepository;
 import carshub.com.br.backend.repositories.EventoRepository;
 import carshub.com.br.backend.repositories.InscricaoRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Service
@@ -33,11 +33,11 @@ public class InscricaoService {
     private final CarroRepository carroRepository;
     
     @Transactional
-    public InscricaoResponseDTO realizarInscricao(UUID idEntusiasta, InscricaoRegistroDTO dto) {
+    public InscricaoResponseDTO realizarInscricao(UUID idEntusiasta, UUID idEvento, InscricaoRegistroDTO dto) {
         Entusiasta entusiasta = entusiastaRepository.findById(idEntusiasta)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Usuário não encontrado."));
 
-        Evento evento = eventoRepository.findById(dto.idEvento())
+        Evento evento = eventoRepository.findById(idEvento)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado."));
 
         // 1. Valida se o evento está aberto para o público
@@ -46,12 +46,12 @@ public class InscricaoService {
         }
 
         // 2. Valida se já não está inscrito
-        if (inscricaoRepository.existsByEntusiasta_IdAndEvento_IdAndStatus(idEntusiasta, dto.idEvento(), StatusInscricao.CONFIRMADA)) {
+        if (inscricaoRepository.existsByEntusiasta_IdAndEvento_IdAndStatus(idEntusiasta, idEvento, StatusInscricao.CONFIRMADA)) {
             throw new RegraDeNegocioException("Você já possui uma inscrição ativa para este evento.");
         }
 
         // 3. Prevenção de Overbooking
-        int vagasOcupadas = inscricaoRepository.countByEvento_IdAndStatus(dto.idEvento(), StatusInscricao.CONFIRMADA);
+        int vagasOcupadas = inscricaoRepository.countByEvento_IdAndStatus(idEvento, StatusInscricao.CONFIRMADA);
         if (vagasOcupadas >= evento.getLimiteParticipantes()) {
             throw new RegraDeNegocioException("Infelizmente o limite de participantes deste evento já foi atingido (Lotação Esgotada).");
         }
@@ -75,10 +75,15 @@ public class InscricaoService {
         return mapearParaDTO(inscricaoSalva);
     }
 
-    public List<InscricaoResponseDTO> listarMinhasInscricoes(UUID idEntusiasta) {
-        return inscricaoRepository.findAllByEntusiasta_Id(idEntusiasta).stream()
-                .map(this::mapearParaDTO)
-                .collect(Collectors.toList());
+    /**
+     * AJUSTE 1.3 (pendencia): minhas inscricoes PAGINADAS no SQL (data desc),
+     * devolvendo Page<InscricaoResponseDTO> para o envelope do controller.
+     */
+    public Page<InscricaoResponseDTO> listarMinhasInscricoes(UUID idEntusiasta, int pagina, int tamanho) {
+        return inscricaoRepository
+                .findAllByEntusiasta_IdOrderByDataDesc(
+                        idEntusiasta, PaginaRespostaDTO.pageRequest(pagina, tamanho))
+                .map(this::mapearParaDTO);
     }
 
     @Transactional

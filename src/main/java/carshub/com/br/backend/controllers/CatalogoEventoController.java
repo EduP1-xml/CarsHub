@@ -1,5 +1,9 @@
 package carshub.com.br.backend.controllers;
 
+import carshub.com.br.backend.config.UsuarioAutenticado;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.eventos.CatalogoEventoResponseDTO;
 import carshub.com.br.backend.services.CatalogoEventoService;
@@ -12,6 +16,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/carshub/eventos")
+@PreAuthorize("permitAll()")
 public class CatalogoEventoController {
 
     private final CatalogoEventoService catalogoEventoService;
@@ -19,7 +24,7 @@ public class CatalogoEventoController {
     // Endpoint livre para popular o feed principal do aplicativo paginado, default 5
     @GetMapping
     public ResponseEntity<PaginaRespostaDTO<CatalogoEventoResponseDTO>> listarEventosAtivos(
-            @RequestHeader(value = "user-id", required = false) UUID idEntusiasta,
+            @UsuarioAutenticado(required = false) UUID idEntusiasta,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
         return ResponseEntity.ok(PaginaRespostaDTO.de(
@@ -29,7 +34,7 @@ public class CatalogoEventoController {
     @GetMapping("/{idEvento}")
     public ResponseEntity<CatalogoEventoResponseDTO> detalharEvento(
             @PathVariable UUID idEvento,
-            @RequestHeader(value = "user-id", required = false) UUID idEntusiasta) {
+            @UsuarioAutenticado(required = false) UUID idEntusiasta) {
         return ResponseEntity.ok(catalogoEventoService.buscarDetalhesEvento(idEvento, idEntusiasta));
     }
 }

@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# SPRINT 6 (11.10): segredos locais nunca entram no git (ver .env.example)
+.env

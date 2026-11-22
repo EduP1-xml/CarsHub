@@ -5,7 +5,8 @@ services:
     restart: always
     environment:
       MYSQL_DATABASE: carshub
-      MYSQL_ROOT_PASSWORD: root
+      # A senha do root vem do .env (fora do git) — sem fallback hardcoded.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     ports:
       - "3307:3306"
     volumes:
@@ -17,18 +18,46 @@ services:
     restart: on-failure
     ports:
       - "8080:8080" # Porta padrão do Spring Boot
+    # SPRINT 6 (11.10): TODAS as credenciais/chaves vêm do .env (fora do git).
+    # O compose injeta todas as variáveis do .env no container do backend.
+    env_file:
+      - .env
     environment:
+      # Valores específicos do container sobrepõem o .env:
       # O Docker usa o nome do serviço (db) em vez de localhost
       SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/carshub?createDatabaseIfNotExist=true&serverTimezone=UTC
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root
       APP_UPLOAD_DIR: /app/uploads
+      # 1.5 UPLOADS: storage S3 (RustFS) na rede do compose. O backend cria
+      # o bucket e aplica a leitura publica no bootstrap (FileStorageService).
+      STORAGE_S3_ENDPOINT: http://rustfs:9000
+      # URL publica das fotos vista pelo NAVEGADOR (fora da rede do compose)
+      STORAGE_S3_URL_BASE: http://localhost:9000/carshub-uploads
     volumes:
       # Mapeia a pasta de uploads do container para o seu computador local
       - ./uploads:/app/uploads
     depends_on:
       db:
         condition: service_started
+      rustfs:
+        condition: service_started
+
+  # 1.5 UPLOADS: storage compativel com S3 — RustFS, substituto do MinIO
+  # (cujas imagens sairam do Docker Hub). API S3 na porta 9000 e console
+  # web em http://localhost:9001.
+  rustfs:
+    image: rustfs/rustfs:1.0.5
+    container_name: carshub-rustfs
+    restart: always
+    environment:
+      # Credenciais do .env (fora do git) — nomes canonicos do RustFS.
+      RUSTFS_ACCESS_KEY: ${STORAGE_S3_CHAVE_ACESSO}
+      RUSTFS_SECRET_KEY: ${STORAGE_S3_CHAVE_SECRETA}
+    ports:
+      - "9000:9000" # API S3
+      - "9001:9001" # Console web
+    volumes:
+      - rustfs_data:/data
 
 volumes:
   mysql_data: # Mantém os dados do banco a salvo mesmo se o container parar
+  rustfs_data: # Dados do RustFS (fotos no storage S3)

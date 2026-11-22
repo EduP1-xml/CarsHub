@@ -2,6 +2,7 @@ package carshub.com.br.backend.services;
 
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.models.dtos.AlteracaoSenhaDTO;
+import carshub.com.br.backend.models.dtos.PerfilUsuarioDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilOrganizadorEventoPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilOrganizadorEventoPutDTO;
 import carshub.com.br.backend.models.entities.OrganizadorEvento;
@@ -19,6 +20,12 @@ public class OrganizadorEventoService {
 
     private final OrganizadorEventoRepository repositorioOrganizadorEvento;
     private final AlteracaoSenhaService servicoAlteracaoSenha;
+
+    /** REGRA 4.1: GET do proprio perfil (sem latitude/longitude). */
+    @Transactional(readOnly = true)
+    public PerfilUsuarioDTO buscarPerfil(UUID id) {
+        return new PerfilUsuarioDTO(buscarOrganizadorOuLancarExcecao(id));
+    }
 
     @Transactional
     public OrganizadorEvento substituirPerfil(UUID id, PerfilOrganizadorEventoPutDTO dados) {

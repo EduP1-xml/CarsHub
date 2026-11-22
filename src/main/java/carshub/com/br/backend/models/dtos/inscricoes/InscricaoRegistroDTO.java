@@ -1,12 +1,12 @@
 package carshub.com.br.backend.models.dtos.inscricoes;
 
-import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
+/**
+ * INVENTARIO DE ENDPOINTS (item 2): o id do evento deixou de vir no corpo e
+ * passou para a propria rota POST /api/carshub/entusiastas/inscricoes/{idEvento}.
+ */
 public record InscricaoRegistroDTO(
-        @NotNull(message = "O ID do evento é obrigatório para a inscrição.")
-        UUID idEvento,
-        
         // Opcional: Se ele for um colecionador e quiser vincular um carro ao evento
-        UUID idCarro 
+        UUID idCarro
 ) {}

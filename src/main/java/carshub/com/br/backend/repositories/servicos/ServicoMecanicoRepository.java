@@ -37,6 +37,26 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
 
     Page<ServicoMecanico> findAllByMecanico_IdOrderByDataHoraSolicitacaoDesc(UUID idMecanico, Pageable pageable);
 
+    /**
+     * F37: fila de trabalho do mecanico ordenada por prioridade de status —
+     * aceitas (PENDENTE), em andamento (CHEGOU), propostas enviadas (PROPOSTA)
+     * e finalizadas (FINALIZADO) — e, dentro de cada grupo, do mais recente
+     * para o mais antigo. A ordenacao fica no SQL para preservar a paginacao.
+     */
+    @Query("""
+            SELECT s FROM ServicoMecanico s
+             WHERE s.mecanico.id = :idMecanico
+             ORDER BY CASE s.status
+                        WHEN carshub.com.br.backend.models.enums.servicos.StatusServico.PENDENTE THEN 0
+                        WHEN carshub.com.br.backend.models.enums.servicos.StatusServico.CHEGOU THEN 1
+                        WHEN carshub.com.br.backend.models.enums.servicos.StatusServico.PROPOSTA THEN 2
+                        WHEN carshub.com.br.backend.models.enums.servicos.StatusServico.FINALIZADO THEN 3
+                        ELSE 4
+                      END,
+                      s.dataHoraSolicitacao DESC
+            """)
+    Page<ServicoMecanico> listarFilaDeTrabalhoPorPrioridade(@Param("idMecanico") UUID idMecanico, Pageable pageable);
+
     Page<ServicoMecanico> findAllByCarro_IdAndStatusOrderByDataHoraFinalizacaoDesc(UUID idCarro, StatusServico status, Pageable pageable);
 
     /**
@@ -267,4 +287,25 @@ public interface ServicoMecanicoRepository extends JpaRepository<ServicoMecanico
     int liberarPropostasExpiradas(@Param("limite") LocalDateTime limite,
                                   @Param("statusNovo") StatusServico statusNovo,
                                   @Param("statusEsperado") StatusServico statusEsperado);
+
+    /**
+     * SPRINT 6 (11.11 — LGPD): anonimiza os COMENTARIOS de avaliacao (texto
+     * livre do titular) dos servicos FINALIZADOS ha mais tempo que a retencao
+     * configurada (app.lgpd.dias-retencao-comentarios-servicos). As notas
+     * (agregados de reputacao) e as evidencias permanecem — a anonimizacao de
+     * fotos/coordenadas esta definida na politica e depende de migrations
+     * (colunas NOT NULL — handoff 4.1).
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ServicoMecanico s
+               SET s.comentarioAvaliacaoEntusiasta = null,
+                   s.comentarioAvaliacaoMecanico = null
+             WHERE s.status = :statusFinalizado
+               AND s.dataHoraFinalizacao < :limite
+               AND (s.comentarioAvaliacaoEntusiasta IS NOT NULL
+                    OR s.comentarioAvaliacaoMecanico IS NOT NULL)
+            """)
+    int anonimizarComentariosFinalizados(@Param("limite") LocalDateTime limite,
+                                         @Param("statusFinalizado") StatusServico statusFinalizado);
 }

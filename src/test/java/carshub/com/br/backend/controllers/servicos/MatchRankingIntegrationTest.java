@@ -76,8 +76,8 @@ class MatchRankingIntegrationTest extends TesteIntegracaoBase {
         // Chamado do colecionador (congela os elegiveis)
         Entusiasta colecionador = criarColecionador(repositorioEntusiasta, emailUnico("rk0" + sufixo), cpfUnico());
         Carro carro = criarCarro(repositorioCarro, colecionador.getColecionador(), placaUnico());
-        MvcResult criado = mockMvc.perform(post("/api/carshub/colecionador/servicos/mecanicos")
-                        .header("user-id", colecionador.getId())
+        MvcResult criado = mockMvc.perform(post("/api/carshub/colecionador/servicos/mecanicos").with(csrfToken())
+                        .header("Authorization", tokenDe(colecionador))
                         .contentType("application/json")
                         .content("""
                                 {"idCarro":"%s","servicosOfertados":["TROCA_DE_OLEO"],"latitude":%s,"longitude":%s}
@@ -88,7 +88,7 @@ class MatchRankingIntegrationTest extends TesteIntegracaoBase {
                 .get("idServico").asText());
 
         MvcResult ranking = mockMvc.perform(get(BASE_RANKING + "/{id}/prestadores-compativeis", idServico)
-                        .header("user-id", colecionador.getId())
+                        .header("Authorization", tokenDe(colecionador))
                         .param("tamanho", "1000"))
                 .andExpect(status().isOk())
                 .andReturn();
@@ -121,7 +121,7 @@ class MatchRankingIntegrationTest extends TesteIntegracaoBase {
         Entusiasta intruso = criarColecionador(repositorioEntusiasta, emailUnico("rki" + sufixo), cpfUnico());
         criarCarro(repositorioCarro, intruso.getColecionador(), placaUnico());
         mockMvc.perform(get(BASE_RANKING + "/{id}/prestadores-compativeis", idServico)
-                        .header("user-id", intruso.getId()))
+                        .header("Authorization", tokenDe(intruso)))
                 .andExpect(status().isForbidden());
     }
 
@@ -139,8 +139,8 @@ class MatchRankingIntegrationTest extends TesteIntegracaoBase {
                     List.of(ServicosOfertados.TROCA_DE_OLEO), LATITUDE_PADRAO, LONGITUDE_PADRAO));
         }
 
-        MvcResult criado = mockMvc.perform(post("/api/carshub/colecionador/servicos/mecanicos")
-                        .header("user-id", colecionador.getId())
+        MvcResult criado = mockMvc.perform(post("/api/carshub/colecionador/servicos/mecanicos").with(csrfToken())
+                        .header("Authorization", tokenDe(colecionador))
                         .contentType("application/json")
                         .content("""
                                 {"idCarro":"%s","servicosOfertados":["TROCA_DE_OLEO"],"latitude":%s,"longitude":%s}
@@ -151,23 +151,23 @@ class MatchRankingIntegrationTest extends TesteIntegracaoBase {
                 .get("idServico").asText());
 
         for (int i = 0; i < 10; i++) {
-            mockMvc.perform(post("/api/carshub/mecanicos/servicos/{id}/proposta", idServico)
-                            .header("user-id", mecanicos.get(i).getId())
+            mockMvc.perform(post("/api/carshub/mecanicos/servicos/{id}/proposta", idServico).with(csrfToken())
+                            .header("Authorization", tokenDe(mecanicos.get(i)))
                             .contentType("application/json")
                             .content("{\"valorProposto\":300.00,\"latitude\":%s,\"longitude\":%s}"
                                     .formatted(LATITUDE_PADRAO, LONGITUDE_PADRAO)))
                     .andExpect(status().isOk());
 
             // Rejeicao devolve o chamado para a rede; o contador N14 acumula sem decrementar
-            mockMvc.perform(patch("/api/carshub/colecionador/servicos/mecanicos/{id}/rejeitar-proposta", idServico)
-                            .header("user-id", colecionador.getId()))
+            mockMvc.perform(patch("/api/carshub/colecionador/servicos/mecanicos/{id}/rejeitar-proposta", idServico).with(csrfToken())
+                            .header("Authorization", tokenDe(colecionador)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("SOLICITADO"));
         }
 
         // A 11a proposta (de outro mecanico) e recusada
-        mockMvc.perform(post("/api/carshub/mecanicos/servicos/{id}/proposta", idServico)
-                        .header("user-id", mecanicos.get(10).getId())
+        mockMvc.perform(post("/api/carshub/mecanicos/servicos/{id}/proposta", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(mecanicos.get(10)))
                         .contentType("application/json")
                         .content("{\"valorProposto\":300.00,\"latitude\":%s,\"longitude\":%s}"
                                 .formatted(LATITUDE_PADRAO, LONGITUDE_PADRAO)))
@@ -184,8 +184,8 @@ class MatchRankingIntegrationTest extends TesteIntegracaoBase {
         Mecanico mecanico = criarMecanico(repositorioMecanico, emailUnico("rjm" + sufixo), cnpjUnico(),
                 List.of(ServicosOfertados.TROCA_DE_OLEO), LATITUDE_PADRAO, LONGITUDE_PADRAO);
 
-        MvcResult criado = mockMvc.perform(post("/api/carshub/colecionador/servicos/mecanicos")
-                        .header("user-id", colecionador.getId())
+        MvcResult criado = mockMvc.perform(post("/api/carshub/colecionador/servicos/mecanicos").with(csrfToken())
+                        .header("Authorization", tokenDe(colecionador))
                         .contentType("application/json")
                         .content("""
                                 {"idCarro":"%s","servicosOfertados":["TROCA_DE_OLEO"],"latitude":%s,"longitude":%s}
@@ -195,16 +195,16 @@ class MatchRankingIntegrationTest extends TesteIntegracaoBase {
         UUID idServico = UUID.fromString(objectMapper.readTree(criado.getResponse().getContentAsString())
                 .get("idServico").asText());
 
-        mockMvc.perform(post("/api/carshub/mecanicos/servicos/{id}/proposta", idServico)
-                        .header("user-id", mecanico.getId())
+        mockMvc.perform(post("/api/carshub/mecanicos/servicos/{id}/proposta", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(mecanico))
                         .contentType("application/json")
                         .content("{\"valorProposto\":300.00,\"latitude\":%s,\"longitude\":%s}"
                                 .formatted(LATITUDE_PADRAO, LONGITUDE_PADRAO)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PROPOSTA"));
 
-        mockMvc.perform(patch("/api/carshub/colecionador/servicos/mecanicos/{id}/rejeitar-proposta", idServico)
-                        .header("user-id", colecionador.getId()))
+        mockMvc.perform(patch("/api/carshub/colecionador/servicos/mecanicos/{id}/rejeitar-proposta", idServico).with(csrfToken())
+                        .header("Authorization", tokenDe(colecionador)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SOLICITADO"));
     }

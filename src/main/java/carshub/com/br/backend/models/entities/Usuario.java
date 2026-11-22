@@ -14,10 +14,12 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -120,10 +122,34 @@ public class Usuario implements UserDetails {
     @Column(name = "dataEnvioCodigoRedefinicaoSenha_Usuario")
     private LocalDateTime dataEnvioCodigoRedefinicaoSenha;
 
+    /**
+     * AUTORIZACAO (07/11/2026): authorities usadas pelas regras de URL e pelos
+     * @PreAuthorize. CONTRATO CONGELADO para a Sprint 6 (JWT): as claims do token
+     * devem carregar exatamente estes nomes (enum.name(), sem prefixo ROLE_):
+     * ENTUSIASTA, ORGANIZADOR_EVENTO, PRESTADOR_SERVICO, MECANICO, GUINCHO.
+     * COLECIONADOR NAO e authority: a authority efetiva do colecionador e
+     * ENTUSIASTA (a garagem e validada no service - 422) e o JWT deve emitir a
+     * claim com ESTE mesmo mapeamento. Renomear os enums quebra o contrato:
+     * atualizar o conversor JWT e os testes.
+     */
     @Override
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of();
+        List<GrantedAuthority> autoridades = new ArrayList<>();
+
+        if (tipoUsuario != null) {
+            TipoUsuario tipoEfetivo = tipoUsuario == TipoUsuario.COLECIONADOR
+                    ? TipoUsuario.ENTUSIASTA
+                    : tipoUsuario;
+            autoridades.add(new SimpleGrantedAuthority(tipoEfetivo.name()));
+        }
+
+        if (this instanceof PrestadorServico prestador
+                && prestador.getTipoPrestadorServico() != null) {
+            autoridades.add(new SimpleGrantedAuthority(prestador.getTipoPrestadorServico().name()));
+        }
+
+        return autoridades;
     }
 
     @Override

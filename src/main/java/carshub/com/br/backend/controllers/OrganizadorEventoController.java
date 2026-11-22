@@ -1,6 +1,11 @@
 package carshub.com.br.backend.controllers;
 
+import carshub.com.br.backend.config.UsuarioAutenticado;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import carshub.com.br.backend.models.dtos.AlteracaoSenhaDTO;
+import carshub.com.br.backend.models.dtos.PerfilUsuarioDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilOrganizadorEventoPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilOrganizadorEventoPutDTO;
 import carshub.com.br.backend.services.OrganizadorEventoService;
@@ -17,14 +22,21 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/carshub/organizadores")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('ORGANIZADOR_EVENTO')")
 public class OrganizadorEventoController {
 
     private final OrganizadorEventoService servicoOrganizador;
     private final FileStorageService servicoArmazenamentoArquivo;
 
+    /** REGRA 4.1: leitura do proprio perfil (sem latitude/longitude). */
+    @GetMapping("/perfil")
+    public ResponseEntity<PerfilUsuarioDTO> buscarPerfil(@UsuarioAutenticado UUID id) {
+        return ResponseEntity.ok(servicoOrganizador.buscarPerfil(id));
+    }
+
     @PutMapping("/perfil")
     public ResponseEntity<String> substituirPerfilCompleto(
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @Valid @RequestBody PerfilOrganizadorEventoPutDTO dados) {
 
         servicoOrganizador.substituirPerfil(id, dados);
@@ -33,7 +45,7 @@ public class OrganizadorEventoController {
 
     @PatchMapping("/perfil")
     public ResponseEntity<String> atualizarPerfilParcial(
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @RequestBody PerfilOrganizadorEventoPatchDTO dados) {
 
         servicoOrganizador.atualizarPerfilCondicional(id, dados);
@@ -42,7 +54,7 @@ public class OrganizadorEventoController {
 
     @PostMapping("/foto-perfil")
     public ResponseEntity<String> enviarFotoPerfil(
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @RequestParam("arquivo") MultipartFile arquivo) {
         try {
             String uriDownloadArquivo = servicoArmazenamentoArquivo.salvarFotoPerfil(id, arquivo);
@@ -56,14 +68,14 @@ public class OrganizadorEventoController {
     }
 
     @PostMapping("/senha/solicitar-codigo")
-    public ResponseEntity<String> solicitarCodigoAlteracaoSenha(@RequestHeader("user-id") UUID id) {
+    public ResponseEntity<String> solicitarCodigoAlteracaoSenha(@UsuarioAutenticado UUID id) {
         servicoOrganizador.solicitarCodigoAlteracaoSenha(id);
         return ResponseEntity.ok("Enviamos um código de verificação para o seu e-mail.");
     }
 
     @PatchMapping("/senha")
     public ResponseEntity<String> alterarSenha(
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @Valid @RequestBody AlteracaoSenhaDTO dados) {
         servicoOrganizador.alterarSenha(id, dados);
         return ResponseEntity.ok("Senha alterada com sucesso.");

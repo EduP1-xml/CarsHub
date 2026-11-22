@@ -1,5 +1,9 @@
 package carshub.com.br.backend.controllers.servicos;
 
+import carshub.com.br.backend.config.UsuarioAutenticado;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.servicos.HistoricoManutencaoResponseDTO;
 import carshub.com.br.backend.services.servicos.PainelServicoService;
@@ -16,6 +20,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/carshub/colecionador/carros")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('ENTUSIASTA')")
 public class HistoricoManutencaoController {
 
     private final PainelServicoService painelServico;
@@ -23,7 +28,7 @@ public class HistoricoManutencaoController {
     @GetMapping("/{idCarro}/historico-manutencoes")
     public ResponseEntity<PaginaRespostaDTO<HistoricoManutencaoResponseDTO>> obterHistoricoDoVeiculo(
             @PathVariable UUID idCarro,
-            @RequestHeader("user-id") UUID id,
+            @UsuarioAutenticado UUID id,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
 

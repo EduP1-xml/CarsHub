@@ -40,17 +40,34 @@ public class PainelServicoService {
     /**
      * Painel padrao (/api/carshub/colecionador/servicos): mecanicos e guinchos
      * ATIVOS na mesma lista, do mais recente para o mais antigo.
+     *
+     * AJUSTE 1.3 (pendencia): paginado com a tecnica da JANELA — as duas fontes
+     * sao paginadas no SQL (as versoes Page<ServicoRespostaDTO> ja existentes),
+     * pedindo de cada uma os primeiros (pagina + 1) * tamanho itens; a mesclagem
+     * por data acontece em Java e o recorte da pagina sai do subconjunto.
      */
     @Transactional(readOnly = true)
-    public List<ServicoRespostaDTO> listarSolicitacoesAtivas(UUID idEntusiasta) {
-        List<ServicoRespostaDTO> solicitacoes = new ArrayList<>();
-        solicitacoes.addAll(servicoMecanico.listarMeusServicos(idEntusiasta, true));
-        solicitacoes.addAll(servicoGuincho.listarMeusServicos(idEntusiasta, true));
+    public PaginaRespostaDTO<ServicoRespostaDTO> listarSolicitacoesAtivas(UUID idEntusiasta, int pagina, int tamanho) {
+        PageRequest pageRequest = PaginaRespostaDTO.pageRequest(pagina, tamanho);
+        int janela = (pageRequest.getPageNumber() + 1) * pageRequest.getPageSize();
+
+        Page<ServicoRespostaDTO> paginaMecanicos = servicoMecanico.listarMeusServicos(idEntusiasta, true, 0, janela);
+        Page<ServicoRespostaDTO> paginaGuinchos = servicoGuincho.listarMeusServicos(idEntusiasta, true, 0, janela);
+
+        List<ServicoRespostaDTO> solicitacoes = new ArrayList<>(paginaMecanicos.getContent());
+        solicitacoes.addAll(paginaGuinchos.getContent());
 
         solicitacoes.sort(Comparator.comparing(ServicoRespostaDTO::dataHoraSolicitacao,
                 Comparator.nullsLast(Comparator.reverseOrder())));
 
-        return solicitacoes;
+        int inicio = pageRequest.getPageNumber() * pageRequest.getPageSize();
+        int fim = Math.min(inicio + pageRequest.getPageSize(), solicitacoes.size());
+        List<ServicoRespostaDTO> recorte =
+                (inicio >= solicitacoes.size()) ? List.of() : solicitacoes.subList(inicio, fim);
+
+        long total = paginaMecanicos.getTotalElements() + paginaGuinchos.getTotalElements();
+
+        return PaginaRespostaDTO.de(recorte, total, pageRequest.getPageNumber(), pageRequest.getPageSize());
     }
 
     /**

@@ -1,5 +1,9 @@
 package carshub.com.br.backend.controllers;
 
+import carshub.com.br.backend.config.UsuarioAutenticado;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import carshub.com.br.backend.models.dtos.PaginaRespostaDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroPatchDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRegistroDTO;
@@ -16,6 +20,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/carshub/colecionador/carros")
+@PreAuthorize("hasAuthority('ENTUSIASTA')")
 public class CarroController {
 
     private final CarroService servicoCarro;
@@ -28,7 +33,7 @@ public class CarroController {
     public ResponseEntity<CarroRespostaDTO> registrarCarro(
             @RequestPart("dados") @Valid CarroRegistroDTO dados,
             @RequestPart(value = "arquivos", required = false) List<MultipartFile> arquivos,
-            @RequestHeader("user-id") UUID idEntusiasta) {
+            @UsuarioAutenticado UUID idEntusiasta) {
 
         CarroRespostaDTO carroSalvo = servicoCarro.registrarCarro(dados, arquivos, idEntusiasta);
         return ResponseEntity.status(HttpStatus.CREATED).body(carroSalvo);
@@ -36,7 +41,7 @@ public class CarroController {
 
     @GetMapping
     public ResponseEntity<PaginaRespostaDTO<CarroRespostaDTO>> listarCarros(
-            @RequestHeader("user-id") UUID idEntusiasta,
+            @UsuarioAutenticado UUID idEntusiasta,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina,
             @RequestParam(name = "tamanho", defaultValue = "5") int tamanho) {
         return ResponseEntity.ok(PaginaRespostaDTO.de(
@@ -46,33 +51,39 @@ public class CarroController {
     @GetMapping("/{idCarro}")
     public ResponseEntity<CarroRespostaDTO> buscarCarro(
             @PathVariable UUID idCarro,
-            @RequestHeader("user-id") UUID idEntusiasta) {
+            @UsuarioAutenticado UUID idEntusiasta) {
         CarroRespostaDTO carro = servicoCarro.buscarCarroPorId(idCarro, idEntusiasta);
         return ResponseEntity.ok(carro);
     }
 
-    @PutMapping("/{idCarro}")
+    // AVISO 7.9: PUT multipart como o POST — `dados` + `arquivos` opcionais.
+    @PutMapping(value = "/{idCarro}", consumes = {"multipart/form-data"})
     public ResponseEntity<CarroRespostaDTO> substituirCarro(
             @PathVariable UUID idCarro,
-            @RequestHeader("user-id") UUID idEntusiasta,
-            @Valid @RequestBody CarroRegistroDTO dados) {
-        CarroRespostaDTO carroAtualizado = servicoCarro.substituirCarro(idCarro, dados, idEntusiasta);
+            @UsuarioAutenticado UUID idEntusiasta,
+            @RequestPart("dados") @Valid CarroRegistroDTO dados,
+            @RequestPart(value = "arquivos", required = false) List<MultipartFile> arquivos) {
+        CarroRespostaDTO carroAtualizado = servicoCarro.substituirCarro(idCarro, dados, arquivos, idEntusiasta);
         return ResponseEntity.ok(carroAtualizado);
     }
 
-    @PatchMapping("/{idCarro}")
+    // AVISO 7.8: PATCH multipart — `dados` + partes opcionais foto1/foto2
+    // (as fotos sao trocadas uma a uma, sem exceder o limite de 2).
+    @PatchMapping(value = "/{idCarro}", consumes = {"multipart/form-data"})
     public ResponseEntity<CarroRespostaDTO> atualizarCarroParcial(
             @PathVariable UUID idCarro,
-            @RequestHeader("user-id") UUID idEntusiasta,
-            @RequestBody CarroPatchDTO dados) {
-        CarroRespostaDTO carroAtualizado = servicoCarro.atualizarCarroCondicional(idCarro, dados, idEntusiasta);
+            @UsuarioAutenticado UUID idEntusiasta,
+            @RequestPart("dados") @Valid CarroPatchDTO dados,
+            @RequestPart(value = "foto1", required = false) MultipartFile foto1,
+            @RequestPart(value = "foto2", required = false) MultipartFile foto2) {
+        CarroRespostaDTO carroAtualizado = servicoCarro.atualizarCarroCondicional(idCarro, dados, foto1, foto2, idEntusiasta);
         return ResponseEntity.ok(carroAtualizado);
     }
 
     @DeleteMapping("/{idCarro}")
     public ResponseEntity<Void> removerCarro(
             @PathVariable UUID idCarro,
-            @RequestHeader("user-id") UUID idEntusiasta) {
+            @UsuarioAutenticado UUID idEntusiasta) {
         servicoCarro.removerCarro(idCarro, idEntusiasta);
         return ResponseEntity.noContent().build();
     }

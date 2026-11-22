@@ -3,6 +3,7 @@ package carshub.com.br.backend.services;
 import carshub.com.br.backend.exceptions.RecursoNaoEncontradoException;
 import carshub.com.br.backend.models.dtos.AlteracaoSenhaDTO;
 import carshub.com.br.backend.models.dtos.LatitudeLongitudeDTO;
+import carshub.com.br.backend.models.dtos.PerfilUsuarioDTO;
 import carshub.com.br.backend.models.dtos.perfis.patches.PerfilEntusiastaPatchDTO;
 import carshub.com.br.backend.models.dtos.perfis.puts.PerfilEntusiastaPutDTO;
 import carshub.com.br.backend.models.entities.Entusiasta;
@@ -20,6 +21,12 @@ public class EntusiastaService {
 
     private final EntusiastaRepository repositorioEntusiasta;
     private final AlteracaoSenhaService servicoAlteracaoSenha;
+
+    /** REGRA 4.1: GET do proprio perfil (sem latitude/longitude). */
+    @Transactional(readOnly = true)
+    public PerfilUsuarioDTO buscarPerfil(UUID id) {
+        return new PerfilUsuarioDTO(buscarEntusiastaOuLancarExcecao(id));
+    }
 
     @Transactional
     public Entusiasta substituirPerfil(UUID id, PerfilEntusiastaPutDTO dados) {
