@@ -79,6 +79,8 @@ export function CampoSelect({
         id={id}
         className={`campo-input${erro ? ' campo-input-invalido' : ''}`}
         value={value ?? ''}
+        // Bloqueia o envio com o placeholder (""): vazio num enum vira 400 "corpo mal formatado" no backend.
+        required={obrigatorio}
         {...resto}
       >
         {placeholder !== undefined && <option value="">{placeholder}</option>}
