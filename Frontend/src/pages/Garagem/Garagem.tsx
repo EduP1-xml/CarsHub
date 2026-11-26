@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Alerta } from '../../components/Alerta'
 import { Botao } from '../../components/Botao'
+import { CarrosselFotos } from '../../components/CarrosselFotos'
 import { EstadoVazio } from '../../components/EstadoVazio'
 import { LoadingPagina } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
 import { Paginacao } from '../../components/Paginacao'
-import { listarCarros, removerCarro } from '../../api/carros'
+import { buscarCarro, listarCarros, removerCarro } from '../../api/carros'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { usePaginacao } from '../../hooks/usePaginacao'
@@ -28,6 +29,38 @@ export function Garagem() {
   const [excluindo, setExcluindo] = useState<CarroRespostaDTO | null>(null)
   const [excluindoAgora, setExcluindoAgora] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
+
+  // A listagem da garagem vem SEM as fotos (projeção resumida do backend):
+  // buscamos o detalhe de cada carro da página para alimentar o carrossel.
+  const [fotosPorCarro, setFotosPorCarro] = useState<Record<string, string[]>>({})
+
+  useEffect(() => {
+    let cancelado = false
+    const ids = envelope.conteudo
+      .map((carro) => carro.idCarro)
+      .filter((idCarro) => !(idCarro in fotosPorCarro))
+    if (ids.length === 0) return
+
+    Promise.allSettled(
+      ids.map((idCarro) =>
+        buscarCarro(idCarro).then((resposta) => [idCarro, resposta.data.fotosCarro] as const),
+      ),
+    ).then((resultados) => {
+      if (cancelado) return
+      setFotosPorCarro((atual) => {
+        const proximo = { ...atual }
+        resultados.forEach((resultado, indice) => {
+          // Falha ao buscar o detalhe → mostra o card como "sem fotos".
+          proximo[ids[indice]] = resultado.status === 'fulfilled' ? resultado.value[1] : []
+        })
+        return proximo
+      })
+    })
+
+    return () => {
+      cancelado = true
+    }
+  }, [envelope.conteudo, fotosPorCarro])
 
   async function aoExcluir() {
     if (!excluindo) return
@@ -89,10 +122,24 @@ export function Garagem() {
               <p className="card-subtitulo">Placa {carro.placa}</p>
             </div>
           </div>
-          <div className="card-corpo">
-            <div className="linha-dados">
-              <span className="rotulo">Proprietário</span>
-              <span>{carro.nomeProprietario}</span>
+          <div className="card-corpo card-corpo-carro">
+            <div className="card-info-carro">
+              <div className="linha-dados">
+                <span className="rotulo">Proprietário</span>
+                <span>{carro.nomeProprietario}</span>
+              </div>
+            </div>
+            <div className="card-fotos-carro">
+              {fotosPorCarro[carro.idCarro] !== undefined ? (
+                <CarrosselFotos
+                  fotos={fotosPorCarro[carro.idCarro]}
+                  alt={`${carro.marca} ${carro.modelo}`}
+                />
+              ) : (
+                <div className="carrossel carrossel-carregando">
+                  <span>Carregando fotos...</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="card-acoes">

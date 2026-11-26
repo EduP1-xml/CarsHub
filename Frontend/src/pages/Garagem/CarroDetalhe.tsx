@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Alerta } from '../../components/Alerta'
 import { Botao } from '../../components/Botao'
+import { CarrosselFotos } from '../../components/CarrosselFotos'
 import { LoadingPagina } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
 import { buscarCarro, listarCarros, removerCarro } from '../../api/carros'
@@ -148,18 +149,9 @@ export function CarroDetalhe() {
 
       {mensagem && <Alerta tipo="erro">{mensagem}</Alerta>}
 
-      {carro.fotosCarro.length > 0 && (
-        <div className="galeria" style={{ marginBottom: 16 }}>
-          {carro.fotosCarro.map((url, indice) => (
-            <a key={indice} href={url} target="_blank" rel="noreferrer">
-              <img src={url} alt={`Foto ${indice + 1} do carro`} />
-            </a>
-          ))}
-        </div>
-      )}
-
-      <div className="detalhe-secao">
-        <dl className="linha-tempo">
+      {/* Dados do carro à esquerda e fotos (carrossel) à direita, no mesmo bloco. */}
+      <div className="detalhe-secao detalhe-carro">
+        <dl className="linha-tempo detalhe-carro-dados">
           {linhas.map(([rotulo, valor]) => (
             <div key={rotulo} style={{ display: 'contents' }}>
               <dt>{rotulo}</dt>
@@ -167,6 +159,16 @@ export function CarroDetalhe() {
             </div>
           ))}
         </dl>
+
+        {carro.fotosCarro.length > 0 && (
+          <div className="detalhe-carro-fotos">
+            <CarrosselFotos
+              fotos={carro.fotosCarro}
+              alt={`${carro.marca} ${carro.modelo}`}
+              abrirEmNovaAba
+            />
+          </div>
+        )}
       </div>
 
       <Modal
