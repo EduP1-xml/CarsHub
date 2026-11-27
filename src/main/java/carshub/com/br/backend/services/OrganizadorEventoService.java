@@ -21,7 +21,7 @@ public class OrganizadorEventoService {
     private final OrganizadorEventoRepository repositorioOrganizadorEvento;
     private final AlteracaoSenhaService servicoAlteracaoSenha;
 
-    /** REGRA 4.1: GET do proprio perfil (sem latitude/longitude). */
+    /** REGRA 4.1: GET do proprio perfil (latitude/longitude sempre null: o organizador nao tem localizacao). */
     @Transactional(readOnly = true)
     public PerfilUsuarioDTO buscarPerfil(UUID id) {
         return new PerfilUsuarioDTO(buscarOrganizadorOuLancarExcecao(id));

@@ -30,7 +30,7 @@ public class EntusiastaController {
     private final EntusiastaService servicoEntusiasta;
     private final FileStorageService servicoArmazenamentoArquivo;
 
-    /** REGRA 4.1: leitura do proprio perfil (sem latitude/longitude). */
+    /** REGRA 4.1: leitura do proprio perfil (com latitude/longitude, somente leitura). */
     @GetMapping("/perfil")
     public ResponseEntity<PerfilUsuarioDTO> buscarPerfil(@UsuarioAutenticado UUID id) {
         return ResponseEntity.ok(servicoEntusiasta.buscarPerfil(id));
@@ -57,7 +57,7 @@ public class EntusiastaController {
     @PutMapping("/localizacao")
     public ResponseEntity<Void> atualizarLocalizacao(
             @UsuarioAutenticado UUID id,
-            @RequestBody LatitudeLongitudeDTO dados) {
+            @Valid @RequestBody LatitudeLongitudeDTO dados) {
 
         Entusiasta entusiastaAtualizado = servicoEntusiasta.atualizarLocalizacao(dados, id);
         if (entusiastaAtualizado != null) {

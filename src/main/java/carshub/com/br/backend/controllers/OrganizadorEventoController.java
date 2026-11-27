@@ -28,7 +28,7 @@ public class OrganizadorEventoController {
     private final OrganizadorEventoService servicoOrganizador;
     private final FileStorageService servicoArmazenamentoArquivo;
 
-    /** REGRA 4.1: leitura do proprio perfil (sem latitude/longitude). */
+    /** REGRA 4.1: leitura do proprio perfil (latitude/longitude sempre null: o organizador nao tem localizacao). */
     @GetMapping("/perfil")
     public ResponseEntity<PerfilUsuarioDTO> buscarPerfil(@UsuarioAutenticado UUID id) {
         return ResponseEntity.ok(servicoOrganizador.buscarPerfil(id));

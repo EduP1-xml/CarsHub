@@ -9,10 +9,12 @@ import carshub.com.br.backend.models.dtos.perfis.puts.PerfilEntusiastaPutDTO;
 import carshub.com.br.backend.models.entities.Entusiasta;
 import carshub.com.br.backend.repositories.EntusiastaRepository;
 import carshub.com.br.backend.services.credenciais.AlteracaoSenhaService;
+import carshub.com.br.backend.services.geocodificacao.GeocodificacaoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -22,7 +24,7 @@ public class EntusiastaService {
     private final EntusiastaRepository repositorioEntusiasta;
     private final AlteracaoSenhaService servicoAlteracaoSenha;
 
-    /** REGRA 4.1: GET do proprio perfil (sem latitude/longitude). */
+    /** REGRA 4.1: GET do proprio perfil (com latitude/longitude, somente leitura). */
     @Transactional(readOnly = true)
     public PerfilUsuarioDTO buscarPerfil(UUID id) {
         return new PerfilUsuarioDTO(buscarEntusiastaOuLancarExcecao(id));
@@ -72,12 +74,26 @@ public class EntusiastaService {
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão inválida: Entusiasta não encontrado."));
     }
 
+    /**
+     * Coordenadas digitadas a mao (sem endereco): normaliza para 7 casas e, se
+     * algo mudou, descarta o endereco salvo no perfil — ele pertencia as
+     * coordenadas antigas. O proximo chamado busca o endereco novo.
+     */
     private void atualizarCoordenadas(Entusiasta entusiasta, LatitudeLongitudeDTO dados) {
+        Double latitudeAnterior = entusiasta.getLatitude();
+        Double longitudeAnterior = entusiasta.getLongitude();
+
         if (dados.latitude() != null) {
-            entusiasta.setLatitude(dados.latitude());
+            entusiasta.setLatitude(GeocodificacaoService.normalizarCoordenada(dados.latitude()));
         }
         if (dados.longitude() != null) {
-            entusiasta.setLongitude(dados.longitude());
+            entusiasta.setLongitude(GeocodificacaoService.normalizarCoordenada(dados.longitude()));
+        }
+
+        boolean mudou = !Objects.equals(latitudeAnterior, entusiasta.getLatitude())
+                || !Objects.equals(longitudeAnterior, entusiasta.getLongitude());
+        if (mudou) {
+            entusiasta.limparEnderecoDaLocalizacao();
         }
     }
 }

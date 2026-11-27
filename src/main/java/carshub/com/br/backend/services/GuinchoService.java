@@ -10,6 +10,7 @@ import carshub.com.br.backend.models.dtos.perfis.puts.PerfilGuinchoPutDTO;
 import carshub.com.br.backend.models.entities.Guincho;
 import carshub.com.br.backend.repositories.GuinchoRepository;
 import carshub.com.br.backend.services.credenciais.AlteracaoSenhaService;
+import carshub.com.br.backend.services.geocodificacao.GeocodificacaoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,7 +24,7 @@ public class GuinchoService {
     private final GuinchoRepository repositorioGuincho;
     private final AlteracaoSenhaService servicoAlteracaoSenha;
 
-    /** REGRA 4.1: GET do proprio perfil (sem latitude/longitude). */
+    /** REGRA 4.1: GET do proprio perfil (com latitude/longitude, somente leitura). */
     @Transactional(readOnly = true)
     public PerfilUsuarioDTO buscarPerfil(UUID id) {
         return new PerfilUsuarioDTO(buscarGuinchoOuLancarExcecao(id));
@@ -65,8 +66,8 @@ public class GuinchoService {
             throw new IllegalArgumentException("Informe latitude e longitude para atualizar a localização.");
         }
 
-        guincho.setLatitude(dados.latitude());
-        guincho.setLongitude(dados.longitude());
+        guincho.setLatitude(GeocodificacaoService.normalizarCoordenada(dados.latitude()));
+        guincho.setLongitude(GeocodificacaoService.normalizarCoordenada(dados.longitude()));
 
         return repositorioGuincho.save(guincho);
     }

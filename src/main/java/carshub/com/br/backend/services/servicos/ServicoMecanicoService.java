@@ -129,19 +129,18 @@ public class ServicoMecanicoService {
                 colecionador.getLatitude(), colecionador.getLongitude(),
                 "Informe a localização da ocorrência (latitude e longitude do GPS ou o endereço) — ou atualize a localização do seu perfil.");
 
-        // F14: sem GPS, a localizacao vem do ENDERECO digitado (geocodificado)
-        // e as coordenadas resultantes ATUALIZAM o perfil do colecionador.
-        atualizarPerfilSeLocalizacaoVeioDoEndereco(
-                colecionador, dados.latitude(), dados.longitude(), dados.endereco(), localizacao);
-
         ServicoMecanico servico = new ServicoMecanico();
         servico.setEntusiasta(colecionador);
         servico.setCarro(carro);
         servico.setServicos(dados.servicosOfertados());
         servico.setChaveIdempotencia(chaveIdempotencia);
         servico.setMecanicosElegiveis(resolverMecanicosElegiveis(dados.servicosOfertados()));
-        aplicarLocalizacao(servico, localizacao);
+        aplicarLocalizacao(servico, localizacao, colecionador);
         servico.setStatus(StatusServico.SOLICITADO);
+
+        // F14: qualquer que seja a origem (GPS, endereco ou perfil), a localizacao
+        // usada no chamado ATUALIZA o perfil do colecionador (coordenadas + endereco).
+        atualizarPerfilComLocalizacaoDoChamado(colecionador, servico);
 
         ServicoMecanico servicoSalvo = salvarComTratamentoDeDuplicidade(servico);
         controleCooldown.registrarSolicitacaoDoColecionador(colecionador);
@@ -445,7 +444,8 @@ public class ServicoMecanicoService {
 
     // LADO DO MECANICO
 
-    @Transactional(readOnly = true)
+    // Nao e readOnly: o GPS/endereco informado ATUALIZA a localizacao do perfil do mecanico.
+    @Transactional
     public List<ServicoDisponivelDTO> listarServicosDisponiveis(UUID idMecanico, Double raioKm,
                                                                 Double latitudeInformada, Double longitudeInformada,
                                                                 String enderecoInformado) {
@@ -456,6 +456,8 @@ public class ServicoMecanicoService {
                 latitudeInformada, longitudeInformada, enderecoInformado,
                 mecanico.getLatitude(), mecanico.getLongitude(),
                 "Cadastre a sua localização (PUT /api/carshub/mecanicos/localizacao) ou informe latitude/longitude ou o endereço na requisição para ver os chamados da sua região.");
+
+        atualizarLocalizacaoDoPerfilDoMecanico(mecanico, origem);
 
         // 1) O banco filtra status + retangulo pelo INDICE ESPACIAL e devolve os IDs.
         DistanciaGeografica.CaixaCoordenadas caixa =
@@ -525,6 +527,8 @@ public class ServicoMecanicoService {
                 dados.latitude(), dados.longitude(), null,
                 mecanico.getLatitude(), mecanico.getLongitude(),
                 "Atualize a sua localização (ou informe latitude e longitude na requisição) para enviar propostas.");
+
+        atualizarLocalizacaoDoPerfilDoMecanico(mecanico, localizacao);
 
         int linhasAfetadas = repositorioServicoMecanico.registrarProposta(
                 idServico, mecanico, dados.valorProposto(),
@@ -893,47 +897,87 @@ public class ServicoMecanicoService {
     }
 
     /**
-     * F14: quando a localizacao do chamado NAO veio do GPS do aparelho e sim do
-     * ENDERECO digitado pelo colecionador, as coordenadas geocodificadas passam
-     * a ser as do perfil dele (economiza a proxima solicitacao). Com GPS na
-     * requisicao nada muda: as coordenadas do GPS NAO sobrescrevem o perfil.
+     * F14: a localizacao usada no chamado (GPS, endereco ou perfil) passa a ser a
+     * do perfil do colecionador, junto com o endereco resolvido. Assim, quando ele
+     * responde "estou no mesmo endereco" no proximo chamado, nada e consultado na
+     * Geocoding API. Se a reversa falhou (endereco null), o cache fica vazio e a
+     * proxima solicitacao tenta de novo.
      */
-    private void atualizarPerfilSeLocalizacaoVeioDoEndereco(Entusiasta entusiasta,
-                                                            Double latitudeInformada, Double longitudeInformada,
-                                                            String enderecoInformado,
-                                                            LocalizacaoGeocodificadaDTO localizacao) {
-        boolean veioDoGps = latitudeInformada != null && longitudeInformada != null;
-        boolean veioDoEndereco = enderecoInformado != null && !enderecoInformado.isBlank();
+    private void atualizarPerfilComLocalizacaoDoChamado(Entusiasta entusiasta, ServicoMecanico servico) {
+        entusiasta.setLatitude(servico.getLatitudeAtualEntusiasta());
+        entusiasta.setLongitude(servico.getLongitudeAtualEntusiasta());
+        entusiasta.setEnderecoFormatado(servico.getEnderecoAtualEntusiasta());
+        entusiasta.setEnderecoEstruturado(copiarEmbeddable(servico.getEnderecoEstruturado()));
+        repositorioEntusiasta.save(entusiasta);
+    }
 
-        if (!veioDoGps && veioDoEndereco) {
-            entusiasta.setLatitude(localizacao.latitude());
-            entusiasta.setLongitude(localizacao.longitude());
-            repositorioEntusiasta.save(entusiasta);
+    /** Painel/proposta: coordenadas vindas da requisicao (GPS, digitadas ou do endereco) vao para o perfil. */
+    private void atualizarLocalizacaoDoPerfilDoMecanico(Mecanico mecanico, LocalizacaoGeocodificadaDTO localizacao) {
+        if (Objects.equals(mecanico.getLatitude(), localizacao.latitude())
+                && Objects.equals(mecanico.getLongitude(), localizacao.longitude())) {
+            return;
         }
+
+        mecanico.setLatitude(localizacao.latitude());
+        mecanico.setLongitude(localizacao.longitude());
+        repositorioMecanico.save(mecanico);
     }
 
     /**
-     * O endereco legivel e o estruturado sao preenchidos aqui. Quando a localizacao
-     * veio do GPS, tentamos a geocodificacao reversa (best-effort): se falhar, o
-     * chamado continua valido com EnderecoOcorrenciaDTO.vazio().
+     * O endereco legivel e o estruturado sao preenchidos aqui. Sem endereco na
+     * localizacao (GPS ou perfil), reaproveita o endereco salvo no perfil quando as
+     * coordenadas sao as mesmas (zero chamadas a API); senao tenta a geocodificacao
+     * reversa (best-effort): se falhar, o chamado continua valido com
+     * EnderecoOcorrenciaDTO.vazio().
      */
-    private void aplicarLocalizacao(ServicoMecanico servico, LocalizacaoGeocodificadaDTO localizacao) {
+    private void aplicarLocalizacao(ServicoMecanico servico, LocalizacaoGeocodificadaDTO localizacao,
+                                    Entusiasta colecionador) {
         servico.setLatitudeAtualEntusiasta(localizacao.latitude());
         servico.setLongitudeAtualEntusiasta(localizacao.longitude());
 
         LocalizacaoGeocodificadaDTO comEndereco = localizacao;
 
         if (localizacao.enderecoFormatado() == null) {
-            LocalizacaoGeocodificadaDTO reversa = servicoGeocodificacao
-                    .buscarEnderecoDasCoordenadas(localizacao.latitude(), localizacao.longitude());
+            LocalizacaoGeocodificadaDTO doPerfil = enderecoSalvoNoPerfil(colecionador, localizacao);
 
-            if (reversa != null) {
-                comEndereco = reversa;
+            LocalizacaoGeocodificadaDTO encontrada = (doPerfil != null)
+                    ? doPerfil
+                    : servicoGeocodificacao.buscarEnderecoDasCoordenadas(localizacao.latitude(), localizacao.longitude());
+
+            if (encontrada != null) {
+                comEndereco = encontrada;
             }
         }
 
         servico.setEnderecoAtualEntusiasta(comEndereco.enderecoFormatado());
         servico.setEnderecoEstruturado(montarEmbeddable(comEndereco.enderecoEstruturado()));
+    }
+
+    /** Endereco em cache no perfil, valido so se as coordenadas forem exatamente as mesmas. */
+    private LocalizacaoGeocodificadaDTO enderecoSalvoNoPerfil(Entusiasta colecionador,
+                                                             LocalizacaoGeocodificadaDTO localizacao) {
+        if (colecionador.getEnderecoFormatado() == null) {
+            return null;
+        }
+
+        boolean mesmasCoordenadas =
+                Objects.equals(GeocodificacaoService.normalizarCoordenada(colecionador.getLatitude()), localizacao.latitude())
+                        && Objects.equals(GeocodificacaoService.normalizarCoordenada(colecionador.getLongitude()), localizacao.longitude());
+
+        if (!mesmasCoordenadas) {
+            return null;
+        }
+
+        return new LocalizacaoGeocodificadaDTO(
+                localizacao.latitude(),
+                localizacao.longitude(),
+                colecionador.getEnderecoFormatado(),
+                mapearEnderecoEstruturado(colecionador.getEnderecoEstruturado()));
+    }
+
+    /** Embeddable nao pode ser compartilhado entre entidades: copia campo a campo. */
+    private EnderecoOcorrencia copiarEmbeddable(EnderecoOcorrencia origem) {
+        return (origem == null) ? null : montarEmbeddable(mapearEnderecoEstruturado(origem));
     }
 
     private EnderecoOcorrencia montarEmbeddable(EnderecoOcorrenciaDTO endereco) {

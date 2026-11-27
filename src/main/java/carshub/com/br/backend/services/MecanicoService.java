@@ -11,6 +11,7 @@ import carshub.com.br.backend.models.entities.Mecanico;
 import carshub.com.br.backend.models.entities.PrestadorServico;
 import carshub.com.br.backend.repositories.PrestadorServicoRepository;
 import carshub.com.br.backend.services.credenciais.AlteracaoSenhaService;
+import carshub.com.br.backend.services.geocodificacao.GeocodificacaoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +25,7 @@ public class MecanicoService {
     private final PrestadorServicoRepository repositorioPrestadorServico;
     private final AlteracaoSenhaService servicoAlteracaoSenha;
 
-    /** REGRA 4.1: GET do proprio perfil (sem latitude/longitude). */
+    /** REGRA 4.1: GET do proprio perfil (com latitude/longitude, somente leitura). */
     @Transactional(readOnly = true)
     public PerfilUsuarioDTO buscarPerfil(UUID id) {
         return new PerfilUsuarioDTO(buscarEValidarMecanico(id));
@@ -63,8 +64,8 @@ public class MecanicoService {
             throw new IllegalArgumentException("Informe latitude e longitude para atualizar a localização.");
         }
 
-        mecanico.setLatitude(dados.latitude());
-        mecanico.setLongitude(dados.longitude());
+        mecanico.setLatitude(GeocodificacaoService.normalizarCoordenada(dados.latitude()));
+        mecanico.setLongitude(GeocodificacaoService.normalizarCoordenada(dados.longitude()));
 
         return repositorioPrestadorServico.save(mecanico);
     }

@@ -29,7 +29,7 @@ public class GuinchoController {
     private final GuinchoService servicoGuincho;
     private final FileStorageService servicoArmazenamentoArquivo;
 
-    /** REGRA 4.1: leitura do proprio perfil (sem latitude/longitude). */
+    /** REGRA 4.1: leitura do proprio perfil (com latitude/longitude, somente leitura). */
     @GetMapping("/perfil")
     public ResponseEntity<PerfilUsuarioDTO> buscarPerfil(@UsuarioAutenticado UUID id) {
         return ResponseEntity.ok(servicoGuincho.buscarPerfil(id));
@@ -56,7 +56,7 @@ public class GuinchoController {
     @PutMapping("/localizacao")
     public ResponseEntity<Void> atualizarLocalizacao(
             @UsuarioAutenticado UUID id,
-            @RequestBody LatitudeLongitudeDTO dados) {
+            @Valid @RequestBody LatitudeLongitudeDTO dados) {
 
         servicoGuincho.atualizarLocalizacao(id, dados);
         return ResponseEntity.noContent().build();

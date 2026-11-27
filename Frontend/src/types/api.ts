@@ -132,6 +132,11 @@ export interface PerfilUsuarioDTO {
   urlFotoPerfil: string | null
   notaMediaEntusiasta: number | null
   quantidadeAvaliacoes: number | null
+  /** Localização salva no perfil (null = nenhuma; sempre null para o organizador). */
+  latitude: number | null
+  longitude: number | null
+  /** Endereço salvo junto com as coordenadas (só entusiasta/colecionador; demais = null). */
+  enderecoFormatado: string | null
 }
 
 export interface PerfilEntusiastaPutDTO {

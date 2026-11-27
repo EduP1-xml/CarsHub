@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * perde a diferenca contada; e, com mais de uma instancia no ar, cada uma mantem a
  * sua contagem. Para o cenario atual (uma instancia) o resultado pratico e exato.
  *
- * O plano gratuito da Geocoding API da ~40.000 requisicoes por mes.
+ * Limite mensal configurado no projeto: 999 requisicoes (GEOCODIFICACAO_LIMITE_MENSAL).
  */
 @Component
 @RequiredArgsConstructor
@@ -46,7 +46,7 @@ public class ContadorCotaGeocodificacao {
     private volatile boolean avisoDe80PorCentoEmitido = false;
     private volatile boolean avisoDeLimiteEmitido = false;
 
-    @Value("${app.geocodificacao.limiteMensalRequisicoes:40000}")
+    @Value("${app.geocodificacao.limiteMensalRequisicoes:999}")
     private long limiteMensalRequisicoes;
 
     @Value("${app.geocodificacao.bloquearAoExcederLimite:false}")

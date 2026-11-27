@@ -29,7 +29,7 @@ public class MecanicoController {
     private final MecanicoService servicoMecanico;
     private final FileStorageService servicoArmazenamentoArquivo;
 
-    /** REGRA 4.1: leitura do proprio perfil (sem latitude/longitude). */
+    /** REGRA 4.1: leitura do proprio perfil (com latitude/longitude, somente leitura). */
     @GetMapping("/perfil")
     public ResponseEntity<PerfilUsuarioDTO> buscarPerfil(@UsuarioAutenticado UUID id) {
         return ResponseEntity.ok(servicoMecanico.buscarPerfil(id));
@@ -56,7 +56,7 @@ public class MecanicoController {
     @PutMapping("/localizacao")
     public ResponseEntity<Void> atualizarLocalizacao(
             @UsuarioAutenticado UUID id,
-            @RequestBody LatitudeLongitudeDTO dados) {
+            @Valid @RequestBody LatitudeLongitudeDTO dados) {
 
         servicoMecanico.atualizarLocalizacao(id, dados);
         return ResponseEntity.noContent().build();

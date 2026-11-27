@@ -7,8 +7,11 @@ import { LoadingPagina } from '../../components/Loading'
 import { listarCarros } from '../../api/carros'
 import { solicitarServicoGuincho, solicitarServicoMecanico } from '../../api/servicos'
 import { useToast } from '../../context/ToastContext'
+import { ModalMesmaLocalizacao } from '../../components/ModalMesmaLocalizacao'
 import { obterPosicaoGps } from '../../hooks/useGeolocalizacao'
+import { useLocalizacaoPerfil } from '../../hooks/useLocalizacaoPerfil'
 import type { CarroRespostaDTO, ServicosOfertados } from '../../types/api'
+import { lerCoordenada, propsCampoCoordenada, validarParCoordenadas } from '../../utils/coordenadas'
 import { LABEL_SERVICOS_OFERTADOS, OPCOES_SERVICOS_OFERTADOS } from '../../utils/enums'
 import { extrairErro, mensagemDoErro } from '../../utils/erros'
 
@@ -19,8 +22,10 @@ interface NovoServicoProps {
 
 /**
  * F14/F15 — solicitar serviço. Prioridade de localização (R9):
- * GPS (lat+long JUNTAS; uma só → 400) > endereço digitado (geocodificação bloqueante —
- * o backend ATUALIZA a localização do perfil com o resultado) > perfil > 422.
+ * GPS (lat+long JUNTAS; uma só → 400) > endereço digitado (geocodificação bloqueante) > perfil > 422.
+ * Qualquer origem ATUALIZA a localização (e o endereço) do perfil no backend.
+ * Pop-up "mesmo endereço?" (botão GPS / envio com endereço, só se o perfil tem localização):
+ * SIM → envia sem localização (backend usa o perfil, sem gastar cota); NÃO → fluxo normal.
  * Sem garagem → 422; duplicata → 409; cooldown 5 min → 422;
  * quantidadeMecanicosElegiveis = 0 → aviso "nenhum mecânico compatível agora".
  */
@@ -40,6 +45,10 @@ export function NovoServico({ tipo }: NovoServicoProps) {
   const [mensagem, setMensagem] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
   const [buscandoGps, setBuscandoGps] = useState(false)
+  // Pop-up "mesmo endereço?": de onde veio a pergunta (botão GPS ou envio com endereço).
+  const [perguntaPendente, setPerguntaPendente] = useState<'gps' | 'endereco' | null>(null)
+  const [usandoPerfil, setUsandoPerfil] = useState(false)
+  const perfil = useLocalizacaoPerfil('entusiastas')
 
   useEffect(() => {
     listarCarros(0, 100)
@@ -51,7 +60,7 @@ export function NovoServico({ tipo }: NovoServicoProps) {
       .finally(() => setCarregando(false))
   }, [])
 
-  async function usarGps() {
+  async function executarGps() {
     setMensagem(null)
     setBuscandoGps(true)
     try {
@@ -59,11 +68,39 @@ export function NovoServico({ tipo }: NovoServicoProps) {
       setLatitude(String(posicao.latitude))
       setLongitude(String(posicao.longitude))
       setEndereco('')
+      setUsandoPerfil(false)
     } catch (erro) {
       setMensagem(erro instanceof Error ? erro.message : mensagemDoErro(erro))
     } finally {
       setBuscandoGps(false)
     }
+  }
+
+  /** "Usar meu GPS": se o perfil já tem localização, pergunta antes (economia de cota). */
+  function usarGps() {
+    if (perfil.possuiLocalizacao) {
+      setPerguntaPendente('gps')
+      return
+    }
+    void executarGps()
+  }
+
+  function aoResponderSim() {
+    const origem = perguntaPendente
+    setPerguntaPendente(null)
+    // SIM: limpa GPS/endereço → o backend usa a localização (e o endereço) salvos no perfil.
+    setLatitude('')
+    setLongitude('')
+    setEndereco('')
+    setUsandoPerfil(true)
+    if (origem === 'endereco') void enviar(null)
+  }
+
+  function aoResponderNao() {
+    const origem = perguntaPendente
+    setPerguntaPendente(null)
+    if (origem === 'gps') void executarGps()
+    if (origem === 'endereco') void enviar(endereco.trim())
   }
 
   async function aoEnviar(evento: FormEvent) {
@@ -85,22 +122,39 @@ export function NovoServico({ tipo }: NovoServicoProps) {
       setMensagem('Informe latitude e longitude juntas: o par de coordenadas é obrigatório.')
       return
     }
+    const erroCoordenada = validarParCoordenadas(latitude, longitude)
+    if (erroCoordenada) {
+      setMensagem(erroCoordenada)
+      return
+    }
 
+    // Endereço digitado (geolocalização imputada) gasta cota: pergunta antes, se houver perfil.
+    const enderecoDigitado = endereco.trim()
+    if (!temLat && enderecoDigitado && perfil.possuiLocalizacao) {
+      setPerguntaPendente('endereco')
+      return
+    }
+
+    await enviar(enderecoDigitado || null)
+  }
+
+  async function enviar(enderecoParaEnviar: string | null) {
+    setMensagem(null)
     setEnviando(true)
     try {
       const resposta = ehMecanico
         ? await solicitarServicoMecanico({
             idCarro,
             servicosOfertados: servicos,
-            latitude: temLat ? Number(latitude) : null,
-            longitude: temLong ? Number(longitude) : null,
-            endereco: endereco.trim() || null,
+            latitude: lerCoordenada(latitude),
+            longitude: lerCoordenada(longitude),
+            endereco: enderecoParaEnviar,
           })
         : await solicitarServicoGuincho({
             idCarro,
-            latitude: temLat ? Number(latitude) : null,
-            longitude: temLong ? Number(longitude) : null,
-            endereco: endereco.trim() || null,
+            latitude: lerCoordenada(latitude),
+            longitude: lerCoordenada(longitude),
+            endereco: enderecoParaEnviar,
           })
 
       if (ehMecanico && resposta.data.quantidadeMecanicosElegiveis === 0) {
@@ -181,32 +235,43 @@ export function NovoServico({ tipo }: NovoServicoProps) {
           <h2>Localização da ocorrência</h2>
           <div className="help-bloco">
             Prioridade: <strong>GPS</strong> (latitude + longitude juntas) &gt; <strong>endereço digitado</strong>{' '}
-            (geocodificação bloqueante — o endereço digitado ATUALIZA a localização do seu perfil) &gt;{' '}
-            <strong>localização do perfil</strong>. Se nada for informado, o backend usa a localização do seu perfil.
+            (geocodificação bloqueante) &gt; <strong>localização do perfil</strong>. A localização usada ATUALIZA a
+            do seu perfil. Se nada for informado, o backend usa a localização do seu perfil.
           </div>
+          {usandoPerfil && (
+            <Alerta tipo="info">
+              {perfil.enderecoFormatado ? (
+                <>
+                  Será usada a localização salva no seu perfil: <strong>{perfil.enderecoFormatado}</strong>
+                </>
+              ) : (
+                'Será usada a localização salva no seu perfil.'
+              )}
+            </Alerta>
+          )}
           <div className="form-grid">
             <CampoTexto
               id="latitude"
               rotulo="Latitude (GPS)"
-              type="number"
-              step="any"
+              {...propsCampoCoordenada('latitude')}
               placeholder="-23.5505200"
               value={latitude}
               onChange={(e) => {
                 setLatitude(e.target.value)
                 setEndereco('')
+                setUsandoPerfil(false)
               }}
             />
             <CampoTexto
               id="longitude"
               rotulo="Longitude (GPS)"
-              type="number"
-              step="any"
+              {...propsCampoCoordenada('longitude')}
               placeholder="-46.6333100"
               value={longitude}
               onChange={(e) => {
                 setLongitude(e.target.value)
                 setEndereco('')
+                setUsandoPerfil(false)
               }}
             />
             <div className="campo-largo">
@@ -219,6 +284,7 @@ export function NovoServico({ tipo }: NovoServicoProps) {
                   setEndereco(e.target.value)
                   setLatitude('')
                   setLongitude('')
+                  setUsandoPerfil(false)
                 }}
               />
             </div>
@@ -236,6 +302,13 @@ export function NovoServico({ tipo }: NovoServicoProps) {
           </div>
         </form>
       )}
+
+      <ModalMesmaLocalizacao
+        aberto={perguntaPendente !== null}
+        aoResponderSim={aoResponderSim}
+        aoResponderNao={aoResponderNao}
+        aoFechar={() => setPerguntaPendente(null)}
+      />
     </div>
   )
 }

@@ -108,7 +108,7 @@ app:
     esperaEntreTentativasMs: ${GEOCODIFICACAO_ESPERA_ENTRE_TENTATIVAS_MS}
     falhasParaAbrirCircuito: ${GEOCODIFICACAO_FALHAS_PARA_ABRIR_CIRCUITO}
     segundosCircuitoAberto: ${GEOCODIFICACAO_SEGUNDOS_CIRCUITO_ABERTO}
-    # Cota mensal: 40.000 requisicoes/mes no plano gratuito
+    # Cota mensal do projeto: 999 requisicoes/mes (aviso ao atingir 80%)
     limiteMensalRequisicoes: ${GEOCODIFICACAO_LIMITE_MENSAL}
     bloquearAoExcederLimite: ${GEOCODIFICACAO_BLOQUEAR_AO_EXCEDER}
 

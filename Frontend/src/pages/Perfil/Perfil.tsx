@@ -22,8 +22,8 @@ type Aba = 'dados' | 'localizacao' | 'foto' | 'seguranca'
 
 /**
  * Perfil dos 4 atores (F7/F9/F10 entusiasta · F28 organizador · F35 prestadores).
- * GET /{ator}/perfil pré-carrega PerfilUsuarioDTO (sem latitude/longitude —
- * localização fica no endpoint dedicado). O organizador NÃO tem rota de localização.
+ * GET /{ator}/perfil pré-carrega PerfilUsuarioDTO (inclui latitude/longitude só para
+ * leitura — a escrita fica no PUT /localizacao). O organizador NÃO tem rota de localização.
  */
 export function Perfil() {
   const { usuario } = useAuth()

@@ -63,7 +63,7 @@ app:
     esperaEntreTentativasMs: 250
     falhasParaAbrirCircuito: 5
     segundosCircuitoAberto: 60
-    limiteMensalRequisicoes: 40000
+    limiteMensalRequisicoes: 999
     bloquearAoExcederLimite: false
 
 frontend:
