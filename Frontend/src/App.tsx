@@ -28,6 +28,9 @@ import { PainelDisponiveis } from './pages/Prestador/PainelDisponiveis'
 import { FilaTrabalho } from './pages/Prestador/FilaTrabalho'
 import { ServicoDetalhePrestador } from './pages/Prestador/ServicoDetalhePrestador'
 import { NotFound } from './pages/NotFound'
+import { Clubes } from './pages/Clubes/Clubes'
+import { ClubeForm } from './pages/Clubes/ClubeForm'
+import { ClubeDetalhe } from './pages/Clubes/ClubeDetalhe'
 import type { PrefixoChamado } from './api/servicos'
 
 // ---------------------------------------------------------------------------
@@ -186,6 +189,48 @@ export default function App() {
             <ExigirAuth>
               <ExigirPerfil quando={colecionador}>
                 <ServicoDetalhe />
+              </ExigirPerfil>
+            </ExigirAuth>
+          }
+        />
+
+        {/* Clubes (entusiasta e colecionador) */}
+        <Route
+          path="/clubes"
+          element={
+            <ExigirAuth>
+              <ExigirPerfil quando={entusiastaOuColecionador}>
+                <Clubes />
+              </ExigirPerfil>
+            </ExigirAuth>
+          }
+        />
+        <Route
+          path="/clubes/novo"
+          element={
+            <ExigirAuth>
+              <ExigirPerfil quando={entusiastaOuColecionador}>
+                <ClubeForm />
+              </ExigirPerfil>
+            </ExigirAuth>
+          }
+        />
+        <Route
+          path="/clubes/:idClube"
+          element={
+            <ExigirAuth>
+              <ExigirPerfil quando={entusiastaOuColecionador}>
+                <ClubeDetalhe />
+              </ExigirPerfil>
+            </ExigirAuth>
+          }
+        />
+        <Route
+          path="/clubes/:idClube/editar"
+          element={
+            <ExigirAuth>
+              <ExigirPerfil quando={entusiastaOuColecionador}>
+                <ClubeForm />
               </ExigirPerfil>
             </ExigirAuth>
           }

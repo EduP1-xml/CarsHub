@@ -41,7 +41,8 @@ export function Catalogo() {
   )
 }
 
-function CardEvento({ evento }: { evento: CatalogoEventoResponseDTO }) {
+/** Card de evento do catálogo — reutilizado na aba Eventos dos clubes. */
+export function CardEvento({ evento }: { evento: CatalogoEventoResponseDTO }) {
   return (
     <article className="card">
       <div className="card-cabecalho">

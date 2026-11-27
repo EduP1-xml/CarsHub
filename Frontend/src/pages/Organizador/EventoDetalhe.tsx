@@ -1,3 +1,4 @@
+import { FiltroCarroResumo } from '../../components/FiltroCarroResumo'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Alerta } from '../../components/Alerta'
@@ -165,6 +166,11 @@ export function EventoDetalhe() {
             </>
           )}
         </dl>
+      </div>
+
+      <div className="detalhe-secao">
+        <h2>Carros aceitos</h2>
+        <FiltroCarroResumo filtro={evento.filtroCarro} vazio="Evento aberto a todos os carros." />
       </div>
 
       <div className="detalhe-secao">

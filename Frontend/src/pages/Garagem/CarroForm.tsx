@@ -287,13 +287,21 @@ export function CarroForm() {
 
     setEnviando('PATCH')
     try {
-      await atualizarCarroParcial(idCarro!, patch, foto1, foto2)
+      const resposta = await atualizarCarroParcial(idCarro!, patch, foto1, foto2)
       toast('sucesso', 'Carro atualizado (PATCH).')
+      avisarClubesDesvinculados(resposta.data.clubesDesvinculados)
       navigate(`/garagem/${idCarro}`)
     } catch (erro) {
       tratarErro(erro)
     } finally {
       setEnviando(null)
+    }
+  }
+
+  /** CLUBES: o carro editado deixou de atender ao gosto destes clubes e foi desvinculado. */
+  function avisarClubesDesvinculados(clubes: string[] | undefined) {
+    if (clubes && clubes.length > 0) {
+      toast('info', `O carro não atende mais ao gosto e foi desvinculado de: ${clubes.join(', ')}.`)
     }
   }
 
@@ -305,8 +313,9 @@ export function CarroForm() {
 
     setEnviando('PUT')
     try {
-      await substituirCarro(idCarro!, formParaRegistro(valores, original.fotosCarro), arquivos)
+      const resposta = await substituirCarro(idCarro!, formParaRegistro(valores, original.fotosCarro), arquivos)
       toast('sucesso', 'Carro substituído (PUT).')
+      avisarClubesDesvinculados(resposta.data.clubesDesvinculados)
       navigate(`/garagem/${idCarro}`)
     } catch (erro) {
       tratarErro(erro)

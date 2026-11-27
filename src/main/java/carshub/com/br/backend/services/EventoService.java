@@ -9,11 +9,15 @@ import carshub.com.br.backend.models.dtos.eventos.EventoPutDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRegistroDTO;
 import carshub.com.br.backend.models.dtos.eventos.EventoRespostaDTO;
 import carshub.com.br.backend.models.dtos.geocodificacao.LocalizacaoGeocodificadaDTO;
+import carshub.com.br.backend.models.dtos.clubes.FiltroCarroDTO;
 import carshub.com.br.backend.models.entities.Evento;
+import carshub.com.br.backend.models.entities.FiltroCarro;
 import carshub.com.br.backend.models.entities.OrganizadorEvento;
 import carshub.com.br.backend.models.enums.eventos.StatusEvento;
 import carshub.com.br.backend.repositories.EventoRepository;
 import carshub.com.br.backend.repositories.OrganizadorEventoRepository;
+import carshub.com.br.backend.services.clubes.CarregadorFiltroCarro;
+import carshub.com.br.backend.services.clubes.FiltroCarroMapper;
 import carshub.com.br.backend.services.file.FileStorageService;
 import carshub.com.br.backend.services.geocodificacao.GeocodificacaoService;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +29,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -49,6 +55,7 @@ public class EventoService {
     private final OrganizadorEventoRepository repositorioOrganizador;
     private final FileStorageService servicoArmazenamentoArquivo;
     private final GeocodificacaoService servicoGeocodificacao;
+    private final CarregadorFiltroCarro carregadorFiltroCarro;
 
     @Transactional
     public EventoRespostaDTO criarEvento(EventoRegistroDTO dados, List<MultipartFile> arquivos, UUID idOrganizador) {
@@ -93,12 +100,25 @@ public class EventoService {
             throw new RecursoNaoEncontradoException("Sessão inválida.");
         }
 
-        return repositorioEvento
+        Page<Evento> paginaEventos = repositorioEvento
                 .findAllByOrganizadorEvento_IdOrderByDataHoraInicioDesc(
-                        idOrganizador, PaginaRespostaDTO.pageRequest(pagina, tamanho))
-                .map(this::mapearEntidadeParaResponse);
+                        idOrganizador, PaginaRespostaDTO.pageRequest(pagina, tamanho));
+
+        // CLUBES: os filtros de carro da pagina vem EM LOTE (sem inicializar cada proxy).
+        Map<UUID, UUID> filtroPorEvento = new HashMap<>();
+        List<UUID> idsDaPagina = paginaEventos.getContent().stream().map(Evento::getId).toList();
+        if (!idsDaPagina.isEmpty()) {
+            for (Object[] linha : repositorioEvento.buscarIdsDosFiltros(idsDaPagina)) {
+                filtroPorEvento.put((UUID) linha[0], (UUID) linha[1]);
+            }
+        }
+        Map<UUID, FiltroCarro> filtros = carregadorFiltroCarro.carregar(filtroPorEvento.values());
+
+        return paginaEventos.map(evento -> mapearEntidadeParaResponse(evento,
+                FiltroCarroMapper.paraDTO(filtros.get(filtroPorEvento.get(evento.getId())))));
     }
 
+    @Transactional(readOnly = true)
     public EventoRespostaDTO buscarMeuEventoPorId(UUID idEvento, UUID idOrganizador) {
         Evento evento = verificarPropriedadeDoEvento(idEvento, idOrganizador);
         return mapearEntidadeParaResponse(evento);
@@ -193,6 +213,8 @@ public class EventoService {
         if (dados.limiteParticipantes() != null) evento.setLimiteParticipantes(dados.limiteParticipantes());
         if (dados.complemento() != null) evento.setComplemento(dados.complemento());
         if (dados.dataHoraFim() != null) evento.setDataHoraFim(dados.dataHoraFim());
+        // CLUBES: filtroCarro presente substitui o atual (vazio = aberto a todos); ausente mantem.
+        if (dados.filtroCarro() != null) aplicarFiltroCarro(evento, dados.filtroCarro());
 
         // AVISO 7.9: PATCH multipart — com arquivos, as fotos sao substituidas;
         // sem arquivos, a lista de URLs do JSON continua valendo (compatibilidade).
@@ -309,6 +331,7 @@ public class EventoService {
         evento.setCep(dados.cep());
         evento.setDataHoraInicio(dados.dataHoraInicio());
         evento.setDataHoraFim(dados.dataHoraFim());
+        aplicarFiltroCarro(evento, dados.filtroCarro());
     }
 
     private void mapearPutDtoParaEntidade(Evento evento, EventoPutDTO dados) {
@@ -328,6 +351,24 @@ public class EventoService {
         if (dados.urlFotoEvento() != null) {
             evento.setUrlFotoEvento(dados.urlFotoEvento());
         }
+        // CLUBES: PUT substitui o filtro inteiro; null/vazio = evento aberto a todos.
+        aplicarFiltroCarro(evento, dados.filtroCarro());
+    }
+
+    /**
+     * CLUBES: filtro com algum criterio -> cria ou substitui (no lugar) o filtro
+     * do evento; sem criterio -> evento aberto a todos (o orphanRemoval apaga o
+     * filtro anterior). Faixa invertida -> 422 (FiltroCarroMapper).
+     */
+    private void aplicarFiltroCarro(Evento evento, FiltroCarroDTO dto) {
+        if (!FiltroCarroMapper.possuiAlgumCriterio(dto)) {
+            evento.setFiltroCarro(null);
+            return;
+        }
+        if (evento.getFiltroCarro() == null) {
+            evento.setFiltroCarro(new FiltroCarro());
+        }
+        FiltroCarroMapper.preencher(evento.getFiltroCarro(), dto);
     }
 
     /**
@@ -360,6 +401,10 @@ public class EventoService {
     }
 
     private EventoRespostaDTO mapearEntidadeParaResponse(Evento evento) {
+        return mapearEntidadeParaResponse(evento, FiltroCarroMapper.paraDTO(evento.getFiltroCarro()));
+    }
+
+    private EventoRespostaDTO mapearEntidadeParaResponse(Evento evento, FiltroCarroDTO filtroCarro) {
         return new EventoRespostaDTO(
                 evento.getId(),
                 evento.getNome(),
@@ -379,7 +424,8 @@ public class EventoService {
                 evento.getOrganizadorEvento().getNome(),
                 evento.getDataHoraInicio(),
                 evento.getDataHoraFim(),
-                evento.getUrlFotoEvento() != null ? List.copyOf(evento.getUrlFotoEvento()) : List.of()
+                evento.getUrlFotoEvento() != null ? List.copyOf(evento.getUrlFotoEvento()) : List.of(),
+                filtroCarro
         );
     }
 }

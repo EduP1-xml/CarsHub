@@ -43,6 +43,35 @@ public interface EventoRepository extends JpaRepository<Evento, UUID> {
     Page<CatalogoEventoProjecaoDTO> projetarCatalogoAtivos(@Param("status") StatusEvento status, Pageable pageable);
 
     /**
+     * CLUBES: candidatos da aba Eventos — so os pares (idEvento, idFiltroCarro),
+     * sem instanciar entidades. idFiltroCarro nulo = evento aberto a todos.
+     */
+    @Query("""
+            SELECT e.id, f.id
+              FROM Evento e LEFT JOIN e.filtroCarro f
+             WHERE e.status = :status
+             ORDER BY e.dataHoraInicio ASC
+            """)
+    List<Object[]> listarCandidatosAtivos(@Param("status") StatusEvento status);
+
+    /** CLUBES: mesma projecao do catalogo, restrita aos eventos compativeis com o clube. */
+    @Query("""
+            SELECT new carshub.com.br.backend.models.dtos.eventos.CatalogoEventoProjecaoDTO(
+                   e.id, e.nome, e.descricao, e.preco, e.rua, e.numero, e.bairro,
+                   e.cidade, e.uf, e.cep, e.latitude, e.longitude, e.organizadorEvento.nome,
+                   e.organizadorEvento.login,
+                   e.limiteParticipantes, e.dataHoraInicio, e.dataHoraFim)
+              FROM Evento e
+             WHERE e.id IN :ids
+             ORDER BY e.dataHoraInicio ASC
+            """)
+    Page<CatalogoEventoProjecaoDTO> projetarCatalogoPorIds(@Param("ids") Collection<UUID> ids, Pageable pageable);
+
+    /** Par (idEvento, idFiltroCarro) dos eventos de uma pagina, sem inicializar o filtro. */
+    @Query("SELECT e.id, e.filtroCarro.id FROM Evento e WHERE e.id IN :ids AND e.filtroCarro IS NOT NULL")
+    List<Object[]> buscarIdsDosFiltros(@Param("ids") Collection<UUID> ids);
+
+    /**
      * AVISO 7.4: fotos dos eventos de UMA pagina do catalogo levantadas em UMA
      * consulta (a colecao urlFotoEvento e lazy e nao entra na projecao de
      * escalares). O par (idEvento, url) e montado em Map pelo service.

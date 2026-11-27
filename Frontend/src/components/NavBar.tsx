@@ -53,6 +53,9 @@ export function NavBar() {
               <NavLink to="/inscricoes" className={classeLink}>
                 Minhas inscrições
               </NavLink>
+              <NavLink to="/clubes" className={classeLink}>
+                Clubes
+              </NavLink>
             </>
           )}
           {colecionador && (

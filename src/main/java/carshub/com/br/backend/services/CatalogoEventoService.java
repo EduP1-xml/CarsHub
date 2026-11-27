@@ -37,6 +37,21 @@ public class CatalogoEventoService {
         Page<CatalogoEventoProjecaoDTO> paginaEventos = eventoRepository
                 .projetarCatalogoAtivos(StatusEvento.ATIVO, pageRequest);
 
+        return enriquecerPagina(paginaEventos, idEntusiastaLogado);
+    }
+
+    /**
+     * Completa uma pagina de projecoes do catalogo com vagas disponiveis, flag
+     * inscrito e fotos — 3 consultas para a pagina inteira, sem N+1. Usado pelo
+     * catalogo publico e pela aba Eventos dos clubes (ClubeService).
+     */
+    @Transactional(readOnly = true)
+    public Page<CatalogoEventoResponseDTO> enriquecerPagina(Page<CatalogoEventoProjecaoDTO> paginaEventos,
+                                                            UUID idEntusiastaLogado) {
+        if (paginaEventos.isEmpty()) {
+            return paginaEventos.map(projecao -> montarDTO(projecao, Map.of(), Set.of(), Map.of()));
+        }
+
         List<UUID> idsDosEventos = paginaEventos.getContent().stream()
                 .map(CatalogoEventoProjecaoDTO::idEvento)
                 .toList();

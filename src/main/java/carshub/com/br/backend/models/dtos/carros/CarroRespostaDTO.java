@@ -40,5 +40,18 @@ public record CarroRespostaDTO(
         Boolean som,
         Boolean arCondicionado,
         Boolean tetoSolar,
-        List<String> fotosCarro
-) {}
+        List<String> fotosCarro,
+        /**
+         * CLUBES: nomes dos clubes de que o carro foi DESVINCULADO automaticamente
+         * nesta edicao (deixou de atender ao gosto do clube). Vazio nas demais respostas.
+         */
+        List<String> clubesDesvinculados
+) {
+    /** Mesma resposta, trocando a lista de clubes desvinculados. */
+    public CarroRespostaDTO comClubesDesvinculados(List<String> clubes) {
+        return new CarroRespostaDTO(idCarro, marca, modelo, placa, nomeProprietario, carroceria, ano, cor,
+                quantidadeCilindros, motor, litragemMotor, injecao, alimentacao, combustivel, cambio, tracao,
+                suspensao, freio, direcao, roda, aro, numeroPortas, numeroAssentos, materialRevestimentoInterno,
+                vidrosEletricos, som, arCondicionado, tetoSolar, fotosCarro, List.copyOf(clubes));
+    }
+}

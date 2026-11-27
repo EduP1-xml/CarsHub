@@ -9,7 +9,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.hibernate.annotations.JdbcTypeCode;
 
 import java.math.BigDecimal;
@@ -120,4 +122,11 @@ public class Evento {
 
     @Column(name = "longitude_Evento")
     private Double longitude;
+
+    /** Carros aceitos no evento; null = evento aberto a todos os carros. */
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "idFiltroCarro_Evento", unique = true)
+    private FiltroCarro filtroCarro;
 }

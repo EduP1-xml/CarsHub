@@ -29,5 +29,7 @@ public record EventoRespostaDTO(
         String nomeOrganizador,
         LocalDateTime dataHoraInicio,
         LocalDateTime dataHoraFim,
-        List<String> urlFotoEvento
+        List<String> urlFotoEvento,
+        /** null = evento aberto a todos os carros. */
+        carshub.com.br.backend.models.dtos.clubes.FiltroCarroDTO filtroCarro
 ) {}

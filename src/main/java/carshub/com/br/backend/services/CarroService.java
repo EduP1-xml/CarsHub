@@ -10,9 +10,14 @@ import carshub.com.br.backend.models.dtos.carros.CarroRegistroDTO;
 import carshub.com.br.backend.models.dtos.carros.CarroRespostaDTO;
 import carshub.com.br.backend.models.entities.Carro;
 import carshub.com.br.backend.models.entities.Entusiasta;
+import carshub.com.br.backend.models.entities.FiltroCarro;
+import carshub.com.br.backend.models.entities.MembroClube;
 import carshub.com.br.backend.repositories.CarroRepository;
 import carshub.com.br.backend.repositories.EntusiastaRepository;
+import carshub.com.br.backend.repositories.MembroClubeRepository;
 import carshub.com.br.backend.services.file.FileStorageService;
+import carshub.com.br.backend.services.clubes.CarregadorFiltroCarro;
+import carshub.com.br.backend.services.clubes.CompatibilidadeFiltro;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -21,6 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -30,6 +36,8 @@ public class CarroService {
     private final CarroRepository carroRepository;
     private final EntusiastaRepository entusiastaRepository;
     private final FileStorageService fileStorageService;
+    private final MembroClubeRepository membroClubeRepository;
+    private final CarregadorFiltroCarro carregadorFiltroCarro;
 
 
     // POST: Criar Carro
@@ -127,8 +135,10 @@ public class CarroService {
         }
 
         Carro carroAtualizado = carroRepository.save(carro);
+        List<String> clubesDesvinculados = desvincularDeClubesIncompativeis(carroAtualizado);
 
-        return mapearEntidadeParaResponse(carroAtualizado, carroAtualizado.getColecionador().getEntusiasta().getNome());
+        return mapearEntidadeParaResponse(carroAtualizado, carroAtualizado.getColecionador().getEntusiasta().getNome())
+                .comClubesDesvinculados(clubesDesvinculados);
     }
 
     // Método PATCH: Atualização Parcial (AVISO 7.8: fotos trocadas slot a slot)
@@ -180,7 +190,10 @@ public class CarroService {
         carro.setFotosCarro(fotos);
 
         Carro carroAtualizado = carroRepository.save(carro);
-        return mapearEntidadeParaResponse(carroAtualizado, carroAtualizado.getColecionador().getEntusiasta().getNome());
+        List<String> clubesDesvinculados = desvincularDeClubesIncompativeis(carroAtualizado);
+
+        return mapearEntidadeParaResponse(carroAtualizado, carroAtualizado.getColecionador().getEntusiasta().getNome())
+                .comClubesDesvinculados(clubesDesvinculados);
     }
 
     // DELETE: Remover carro (com a mágica da revogação do título)
@@ -188,6 +201,11 @@ public class CarroService {
     public void removerCarro(UUID carroId, UUID entusiastaId) {
         Carro carro = verificarPropriedadeDoCarro(carroId, entusiastaId);
         Entusiasta proprietario = carro.getColecionador().getEntusiasta();
+
+        // CLUBES: os vinculos saem antes do DELETE (a FK de CarrosVinculados_Membro_Clube barraria a exclusao).
+        for (Object[] vinculo : membroClubeRepository.buscarVinculosDoCarro(carroId)) {
+            ((MembroClube) vinculo[0]).getCarrosVinculados().removeIf(vinculado -> vinculado.getId().equals(carroId));
+        }
 
         proprietario.getColecionador().getCarros().remove(carro); // desassocia ANTES de deletar
         carroRepository.delete(carro);
@@ -198,6 +216,32 @@ public class CarroService {
     }
 
     //metodos auxiliares
+
+    /**
+     * CLUBES: depois de editar o carro, reavalia os clubes em que ele esta
+     * vinculado (filtros carregados em lote) e o desvincula dos clubes cujo
+     * gosto ele nao atende mais. Devolve os nomes desses clubes.
+     */
+    private List<String> desvincularDeClubesIncompativeis(Carro carro) {
+        List<Object[]> vinculos = membroClubeRepository.buscarVinculosDoCarro(carro.getId());
+        if (vinculos.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, FiltroCarro> filtros = carregadorFiltroCarro.carregar(
+                vinculos.stream().map(vinculo -> (UUID) vinculo[1]).toList());
+
+        List<String> clubesDesvinculados = new ArrayList<>();
+        for (Object[] vinculo : vinculos) {
+            if (!CompatibilidadeFiltro.carroAtende(filtros.get((UUID) vinculo[1]), carro)) {
+                ((MembroClube) vinculo[0]).getCarrosVinculados()
+                        .removeIf(vinculado -> vinculado.getId().equals(carro.getId()));
+                clubesDesvinculados.add((String) vinculo[2]);
+            }
+        }
+        return clubesDesvinculados;
+    }
+
     private Carro verificarPropriedadeDoCarro(UUID carroId, UUID entusiastaId) {
         Carro carro = carroRepository.findById(carroId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Carro não encontrado."));
@@ -262,11 +306,20 @@ public class CarroService {
     }
 
     private static CarroRespostaDTO mapearProjecaoParaResponse(CarroGaragemProjecaoDTO projecao) {
+        return mapearProjecaoParaResponse(projecao, projecao.placa(), List.of());
+    }
+
+    /**
+     * CLUBES: projecao -> resposta com placa e fotos informadas pelo chamador
+     * (a aba Carros do clube omite a placa e completa as fotos em lote).
+     */
+    public static CarroRespostaDTO mapearProjecaoParaResponse(CarroGaragemProjecaoDTO projecao, String placa,
+                                                              List<String> fotos) {
         return new CarroRespostaDTO(
                 projecao.idCarro(),
                 projecao.marca(),
                 projecao.modelo(),
-                projecao.placa(),
+                placa,
                 projecao.nomeProprietario(),
                 projecao.carroceria(),
                 projecao.ano(),
@@ -291,6 +344,7 @@ public class CarroService {
                 projecao.som(),
                 projecao.arCondicionado(),
                 projecao.tetoSolar(),
+                fotos,
                 List.of());
     }
 
@@ -324,7 +378,8 @@ public class CarroService {
                 carro.getSom(),
                 carro.getArCondicionado(),
                 carro.getTetoSolar(),
-                carro.getFotosCarro() != null ? List.copyOf(carro.getFotosCarro()) : List.of()
+                carro.getFotosCarro() != null ? List.copyOf(carro.getFotosCarro()) : List.of(),
+                List.of()
         );
     }
 }

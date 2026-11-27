@@ -49,5 +49,9 @@ public record EventoPatchDTO(
         @Future(message = "A data de fim deve estar no futuro")
         LocalDateTime dataHoraFim,
 
-        List<String> urlFotoEvento
+        List<String> urlFotoEvento,
+
+        // Carros aceitos no evento (opcional). Ausente/vazio = aberto a todos.
+        @jakarta.validation.Valid
+        carshub.com.br.backend.models.dtos.clubes.FiltroCarroDTO filtroCarro
 ) {}

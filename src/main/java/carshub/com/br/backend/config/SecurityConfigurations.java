@@ -113,6 +113,7 @@ public class SecurityConfigurations {
                         // 3. Perfis (authorities = nomes dos enums; COLECIONADOR usa ENTUSIASTA)
                         .requestMatchers("/api/carshub/entusiastas/**").hasAuthority("ENTUSIASTA")
                         .requestMatchers("/api/carshub/colecionador/**").hasAuthority("ENTUSIASTA")
+                        .requestMatchers("/api/carshub/clubes/**").hasAuthority("ENTUSIASTA")
                         .requestMatchers("/api/carshub/organizadores/**").hasAuthority("ORGANIZADOR_EVENTO")
                         .requestMatchers("/api/carshub/mecanicos/**").hasAuthority("MECANICO")
                         .requestMatchers("/api/carshub/guinchos/**").hasAuthority("GUINCHO")

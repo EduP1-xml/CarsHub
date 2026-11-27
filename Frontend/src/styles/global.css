@@ -1146,3 +1146,154 @@ table.tabela th {
     width: 100%;
   }
 }
+
+/* ---------------- Clubes / filtro de carro ---------------- */
+.filtro-carro {
+  display: grid;
+  gap: 14px;
+}
+
+.filtro-secao {
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 10px 14px 14px;
+  margin: 0;
+  min-width: 0;
+}
+
+.filtro-secao legend {
+  font-weight: 700;
+  font-size: 0.92rem;
+  padding: 0 6px;
+}
+
+.filtro-criterio {
+  padding: 8px 0;
+  border-top: 1px dashed var(--cor-borda);
+}
+
+.filtro-criterio:first-of-type {
+  border-top: none;
+}
+
+.filtro-criterio-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.filtro-criterio-ativo > .filtro-criterio-toggle {
+  color: var(--cor-primaria-escura);
+}
+
+.filtro-opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.filtro-opcoes .chip {
+  gap: 6px;
+  padding: 5px 12px;
+}
+
+.filtro-checkbox {
+  margin: 0;
+}
+
+.filtro-lista-texto {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  max-width: 420px;
+}
+
+.filtro-linha-texto {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.filtro-adicionar {
+  justify-self: start;
+}
+
+.filtro-faixa {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-top: 8px;
+}
+
+.filtro-faixa .campo {
+  width: 140px;
+}
+
+.busca-clubes {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  max-width: 520px;
+}
+
+.lista-membros {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.membro-clube {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--cor-borda);
+  flex-wrap: wrap;
+}
+
+.membro-clube-dados {
+  flex: 1;
+  min-width: 180px;
+}
+
+.seletor-carros {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.seletor-carro {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  cursor: pointer;
+}
+
+.seletor-carro-marcado {
+  border-color: var(--cor-primaria);
+  background: #eff6ff;
+}
+
+.seletor-carro img,
+.seletor-carro-sem-foto {
+  width: 56px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--cor-fundo);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}

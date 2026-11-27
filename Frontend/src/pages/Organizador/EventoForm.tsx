@@ -5,6 +5,14 @@ import { Botao } from '../../components/Botao'
 import { CampoArea, CampoTexto } from '../../components/FormField'
 import { LoadingPagina } from '../../components/Loading'
 import { UploadImagens } from '../../components/UploadImagens'
+import { FiltroCarroForm } from '../../components/FiltroCarroForm'
+import {
+  estadoParaFiltro,
+  estadoVazio,
+  faixasInvertidas,
+  filtroParaEstado,
+  type EstadoFiltro,
+} from '../../components/filtroCarro'
 import {
   atualizarEventoParcial,
   buscarMeuEvento,
@@ -13,7 +21,7 @@ import {
 } from '../../api/eventos'
 import { useForm } from '../../hooks/useForm'
 import { useToast } from '../../context/ToastContext'
-import type { EventoPatchDTO, EventoRegistroDTO, EventoRespostaDTO } from '../../types/api'
+import type { EventoPatchDTO, EventoRegistroDTO, EventoRespostaDTO, FiltroCarroDTO } from '../../types/api'
 import { extrairErro, mensagemDoErro } from '../../utils/erros'
 import { apenasDigitos, paraInputDatetimeLocal, paraIsoLocalDateTime } from '../../utils/validacoes'
 
@@ -67,7 +75,7 @@ function eventoParaForm(evento: EventoRespostaDTO): FormEvento {
   }
 }
 
-function formParaRegistro(v: FormEvento): EventoRegistroDTO {
+function formParaRegistro(v: FormEvento, filtroCarro: FiltroCarroDTO): EventoRegistroDTO {
   return {
     nome: v.nome.trim(),
     descricao: v.descricao.trim(),
@@ -83,6 +91,8 @@ function formParaRegistro(v: FormEvento): EventoRegistroDTO {
     dataHoraInicio: paraIsoLocalDateTime(v.dataHoraInicio),
     dataHoraFim: paraIsoLocalDateTime(v.dataHoraFim),
     urlFotoEvento: null,
+    // Critérios desmarcados vão vazios: sem nenhum critério, o evento fica aberto a todos.
+    filtroCarro,
   }
 }
 
@@ -104,6 +114,7 @@ export function EventoForm() {
   const [mensagem, setMensagem] = useState<string | null>(null)
   const [enviando, setEnviando] = useState<'POST' | 'PUT' | 'PATCH' | null>(null)
   const [arquivos, setArquivos] = useState<File[]>([])
+  const [filtro, setFiltro] = useState<EstadoFiltro>(estadoVazio())
 
   const ehEdicao = !!idEvento
 
@@ -118,6 +129,7 @@ export function EventoForm() {
         if (cancelado) return
         setOriginal(resposta.data)
         reset(eventoParaForm(resposta.data))
+        setFiltro(filtroParaEstado(resposta.data.filtroCarro))
       })
       .catch((erro) => {
         if (!cancelado) setMensagem(mensagemDoErro(erro))
@@ -141,6 +153,16 @@ export function EventoForm() {
     }
   }
 
+  /** Espelho de UX da faixa invertida (a regra final é o 422 do backend). */
+  function filtroValido(dto: FiltroCarroDTO): boolean {
+    const invertidas = faixasInvertidas(dto)
+    if (invertidas.length > 0) {
+      setMensagem(`Carros aceitos: faixa invertida (mínimo maior que o máximo) em ${invertidas.join(', ')}.`)
+      return false
+    }
+    return true
+  }
+
   async function aoCriar(evento: FormEvent) {
     evento.preventDefault()
     setMensagem(null)
@@ -154,9 +176,12 @@ export function EventoForm() {
       return
     }
 
+    const dtoFiltro = estadoParaFiltro(filtro)
+    if (!filtroValido(dtoFiltro)) return
+
     setEnviando('POST')
     try {
-      const resposta = await criarEvento(formParaRegistro(valores), arquivos)
+      const resposta = await criarEvento(formParaRegistro(valores, dtoFiltro), arquivos)
       toast('sucesso', 'Evento criado com sucesso!')
       navigate(`/meus-eventos/${resposta.data.idEvento}`)
     } catch (erro) {
@@ -172,8 +197,11 @@ export function EventoForm() {
     setMensagem(null)
     setErrosCampos({})
 
+    const dtoFiltro = estadoParaFiltro(filtro)
+    if (!filtroValido(dtoFiltro)) return
+
     const patch: EventoPatchDTO = {}
-    const atual = formParaRegistro(valores)
+    const atual = formParaRegistro(valores, dtoFiltro)
     const comparar = (campo: keyof EventoRegistroDTO, anterior: unknown, novo: unknown) => {
       if (JSON.stringify(anterior) !== JSON.stringify(novo)) {
         ;(patch as Record<string, unknown>)[campo] = novo
@@ -192,6 +220,8 @@ export function EventoForm() {
     comparar('cep', original.cep, atual.cep)
     comparar('dataHoraInicio', original.dataHoraInicio, atual.dataHoraInicio)
     comparar('dataHoraFim', original.dataHoraFim, atual.dataHoraFim)
+    // Filtro: compara as formas normalizadas; se mudou, vai inteiro (vazio = aberto a todos).
+    comparar('filtroCarro', estadoParaFiltro(filtroParaEstado(original.filtroCarro)), atual.filtroCarro)
 
     setEnviando('PATCH')
     try {
@@ -211,9 +241,12 @@ export function EventoForm() {
     setMensagem(null)
     setErrosCampos({})
 
+    const dtoFiltro = estadoParaFiltro(filtro)
+    if (!filtroValido(dtoFiltro)) return
+
     setEnviando('PUT')
     try {
-      const registro = formParaRegistro(valores)
+      const registro = formParaRegistro(valores, dtoFiltro)
       await substituirEvento(idEvento, { ...registro, urlFotoEvento: original.urlFotoEvento }, arquivos)
       toast('sucesso', 'Evento substituído (PUT).')
       navigate(`/meus-eventos/${idEvento}`)
@@ -381,6 +414,14 @@ export function EventoForm() {
             ajuda="Deve ser posterior ao início."
           />
         </div>
+
+        <h2>Carros aceitos no evento (opcional)</h2>
+        <div className="help-bloco">
+          Marque as características de carro que o evento aceita; o que ficar desmarcado aceita qualquer valor. Sem
+          nenhuma marcação, o evento é aberto a todos. Os clubes cujo gosto cabe nestes critérios exibem o evento na
+          aba Eventos.
+        </div>
+        <FiltroCarroForm valor={filtro} aoMudar={setFiltro} idBase="evento" />
 
         <h2>Fotos (máx. 3 — jpg/jpeg/png)</h2>
         <UploadImagens

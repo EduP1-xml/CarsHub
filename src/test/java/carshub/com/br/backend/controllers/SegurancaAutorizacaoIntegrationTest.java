@@ -171,6 +171,39 @@ class SegurancaAutorizacaoIntegrationTest extends TesteIntegracaoBase {
                 .andExpect(jsonPath("$.conteudo.length()").value(0));
     }
 
+    // ==================================================================
+    // CLUBES (checklist (d)): 401 sem token, 403 para outros perfis, 200 para entusiasta
+    // ==================================================================
+
+    @Test
+    @DisplayName("/clubes sem token retorna 401")
+    void clubesSemToken401() throws Exception {
+        mockMvc.perform(get("/api/carshub/clubes"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("/clubes com token de organizador ou mecanico retorna 403")
+    void clubesPerfilErrado403() throws Exception {
+        OrganizadorEvento organizador = criarOrganizador(repositorioOrganizadorEvento,
+                emailUnico("secclorg"), cnpjUnico());
+        mockMvc.perform(get("/api/carshub/clubes").header("Authorization", tokenDe(organizador)))
+                .andExpect(status().isForbidden());
+
+        Mecanico mecanico = criarMecanico(repositorioMecanico, emailUnico("secclmec"), cnpjUnico(),
+                List.of(TROCA_DE_OLEO), LATITUDE_PADRAO, LONGITUDE_PADRAO);
+        mockMvc.perform(get("/api/carshub/clubes").header("Authorization", tokenDe(mecanico)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("/clubes com token de entusiasta retorna 200")
+    void clubesEntusiasta200() throws Exception {
+        Entusiasta entusiasta = criarEntusiastaSemGaragem("secclent", true);
+        mockMvc.perform(get("/api/carshub/clubes").header("Authorization", tokenDe(entusiasta)))
+                .andExpect(status().isOk());
+    }
+
     @Test
     @DisplayName("login bloqueado para conta nao verificada (401)")
     void loginContaNaoVerificada401() throws Exception {

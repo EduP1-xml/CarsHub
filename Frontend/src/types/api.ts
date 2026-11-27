@@ -271,6 +271,8 @@ export interface CarroRespostaDTO {
   arCondicionado: boolean
   tetoSolar: boolean
   fotosCarro: string[]
+  /** CLUBES: clubes de que o carro foi desvinculado nesta edição (deixou de atender ao gosto). */
+  clubesDesvinculados: string[]
 }
 
 // ---------- Eventos ----------
@@ -289,6 +291,8 @@ export interface EventoRegistroDTO {
   dataHoraInicio: string // LocalDateTime ISO sem offset
   dataHoraFim: string
   urlFotoEvento?: string[] | null
+  /** Carros aceitos no evento. Ausente/vazio = aberto a todos. */
+  filtroCarro?: FiltroCarroDTO | null
 }
 
 export interface EventoPutDTO extends EventoRegistroDTO {}
@@ -308,6 +312,8 @@ export interface EventoPatchDTO {
   dataHoraInicio?: string
   dataHoraFim?: string
   urlFotoEvento?: string[] | null
+  /** Presente = substitui o filtro (vazio = aberto a todos); ausente = mantém. */
+  filtroCarro?: FiltroCarroDTO | null
 }
 
 export interface EventoRespostaDTO {
@@ -330,6 +336,8 @@ export interface EventoRespostaDTO {
   dataHoraInicio: string
   dataHoraFim: string
   urlFotoEvento: string[]
+  /** null = evento aberto a todos os carros. */
+  filtroCarro: FiltroCarroDTO | null
 }
 
 export interface CatalogoEventoResponseDTO {
@@ -505,4 +513,99 @@ export interface HistoricoManutencaoResponseDTO {
   enderecoOcorrencia: string | null
   valorProposto: number
   dataHoraFinalizacao: string
+}
+
+// ---------- Clubes ----------
+/**
+ * Gosto do clube / carros aceitos no evento. Campo ausente, lista vazia ou faixa
+ * sem pontas = critério não marcado (qualquer valor passa).
+ */
+export interface FiltroCarroDTO {
+  marcas?: string[] | null
+  modelos?: string[] | null
+  cores?: string[] | null
+  carrocerias?: TipoCarroceria[] | null
+  motores?: TipoMotor[] | null
+  injecoes?: TipoInjecao[] | null
+  alimentacoes?: TipoAlimentacao[] | null
+  combustiveis?: TipoCombustivel[] | null
+  cambios?: TipoCambio[] | null
+  tracoes?: TipoTracao[] | null
+  suspensoes?: TipoSuspensao[] | null
+  freios?: TipoFreio[] | null
+  direcoes?: TipoDirecao[] | null
+  rodas?: TipoRoda[] | null
+  materiaisRevestimentoInterno?: TipoMaterialRevestimentoInterno[] | null
+  anoMin?: number | null
+  anoMax?: number | null
+  quantidadeCilindrosMin?: number | null
+  quantidadeCilindrosMax?: number | null
+  litragemMotorMin?: number | null
+  litragemMotorMax?: number | null
+  aroMin?: number | null
+  aroMax?: number | null
+  numeroPortasMin?: number | null
+  numeroPortasMax?: number | null
+  numeroAssentosMin?: number | null
+  numeroAssentosMax?: number | null
+  /** true = exige som; false/null = não é critério. */
+  som?: boolean | null
+}
+
+export interface ClubeRegistroDTO {
+  nome: string
+  descricao?: string | null
+  filtro: FiltroCarroDTO
+  /** PUT sem arquivos: mantém estas URLs. */
+  fotosClube?: string[] | null
+}
+
+export interface ClubeRespostaDTO {
+  idClube: string
+  nome: string
+  descricao: string | null
+  idAdministrador: string
+  nomeAdministrador: string
+  quantidadeMembros: number
+  quantidadeCarrosVinculados: number
+  souMembro: boolean
+  souAdministrador: boolean
+  filtro: FiltroCarroDTO
+  fotosClube: string[]
+  dataCriacao: string
+  /** Só na resposta da edição: carros desvinculados pelo novo filtro. */
+  carrosDesvinculados: number
+}
+
+export interface CarroVinculadoResumoDTO {
+  idCarro: string
+  marca: string
+  modelo: string
+  ano: number
+  cor: string
+  fotoCapa: string | null
+}
+
+export interface MembroClubeRespostaDTO {
+  idEntusiasta: string
+  nome: string
+  urlFotoPerfil: string | null
+  administrador: boolean
+  dataEntrada: string
+  /** Vazio para o entusiasta sem garagem. */
+  carrosVinculados: CarroVinculadoResumoDTO[]
+}
+
+export interface CarroCompativelDTO {
+  idCarro: string
+  marca: string
+  modelo: string
+  ano: number
+  cor: string
+  fotoCapa: string | null
+  vinculado: boolean
+}
+
+export interface EntradaClubeDTO {
+  idsCarros?: string[] | null
 }
